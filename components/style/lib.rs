@@ -102,6 +102,7 @@ pub mod sequential;
 #[cfg(feature = "servo")] pub mod servo_selector_impl;
 pub mod sink;
 pub mod str;
+pub mod stylerefcell;
 pub mod stylesheets;
 pub mod thread_state;
 mod tid;
