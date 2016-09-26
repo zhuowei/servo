@@ -93,6 +93,7 @@ use style::refcell::Ref;
 use style::selector_impl::{NonTSPseudoClass, ServoSelectorImpl};
 use style::selector_matching::ApplicableDeclarationBlock;
 use style::sink::Push;
+use style::stylerefcell::{StyleRefCell, SingleThreadToken};
 use style::values::CSSFloat;
 use style::values::specified::{self, CSSColor, CSSRGBA, LengthOrPercentage};
 
@@ -109,7 +110,7 @@ pub struct Element {
     prefix: Option<DOMString>,
     attrs: DOMRefCell<Vec<JS<Attr>>>,
     id_attribute: DOMRefCell<Option<Atom>>,
-    style_attribute: DOMRefCell<Option<Arc<DOMRefCell<PropertyDeclarationBlock>>>>,
+    style_attribute: DOMRefCell<Option<Arc<StyleRefCell<PropertyDeclarationBlock>>>>,
     attr_list: MutNullableHeap<JS<NamedNodeMap>>,
     class_list: MutNullableHeap<JS<DOMTokenList>>,
     state: Cell<ElementState>,
@@ -297,7 +298,7 @@ pub trait LayoutElementHelpers {
     #[allow(unsafe_code)]
     unsafe fn html_element_in_html_document_for_layout(&self) -> bool;
     fn id_attribute(&self) -> *const Option<Atom>;
-    fn style_attribute(&self) -> *const Option<Arc<DOMRefCell<PropertyDeclarationBlock>>>;
+    fn style_attribute(&self) -> *const Option<Arc<StyleRefCell<PropertyDeclarationBlock>>>;
     fn local_name(&self) -> &Atom;
     fn namespace(&self) -> &Namespace;
     fn get_checked_state_for_layout(&self) -> bool;
@@ -329,7 +330,7 @@ impl LayoutElementHelpers for LayoutJS<Element> {
         #[inline]
         fn from_declaration(rule: PropertyDeclaration) -> ApplicableDeclarationBlock {
             ApplicableDeclarationBlock::from_declarations(
-                Arc::new(DOMRefCell::new(PropertyDeclarationBlock {
+                Arc::new(StyleRefCell::new(PropertyDeclarationBlock {
                     declarations: vec![(rule, Importance::Normal)],
                     important_count: 0,
                 })),
@@ -618,7 +619,7 @@ impl LayoutElementHelpers for LayoutJS<Element> {
     }
 
     #[allow(unsafe_code)]
-    fn style_attribute(&self) -> *const Option<Arc<DOMRefCell<PropertyDeclarationBlock>>> {
+    fn style_attribute(&self) -> *const Option<Arc<StyleRefCell<PropertyDeclarationBlock>>> {
         unsafe {
             (*self.unsafe_get()).style_attribute.borrow_for_layout()
         }
@@ -707,7 +708,7 @@ impl Element {
         self.attrs.borrow()
     }
 
-    pub fn style_attribute(&self) -> &DOMRefCell<Option<Arc<DOMRefCell<PropertyDeclarationBlock>>>> {
+    pub fn style_attribute(&self) -> &DOMRefCell<Option<Arc<StyleRefCell<PropertyDeclarationBlock>>>> {
         &self.style_attribute
     }
 
@@ -735,9 +736,9 @@ impl Element {
 
     // this sync method is called upon modification of the style_attribute property,
     // therefore, it should not trigger subsequent mutation events
-    pub fn sync_property_with_attrs_style(&self) {
+    pub fn sync_property_with_attrs_style(&self, token: &SingleThreadToken) {
         let style_str = if let &Some(ref declarations) = &*self.style_attribute().borrow() {
-            declarations.borrow().to_css_string()
+            declarations.borrow(token).to_css_string()
         } else {
             String::new()
         };
@@ -764,12 +765,13 @@ impl Element {
          self.attrs.borrow_mut().push(JS::from_ref(&attr));
     }
 
-    pub fn remove_inline_style_property(&self, property: &str) {
-        fn remove(element: &Element, property: &str) {
+    pub fn remove_inline_style_property(&self, property: &str, token: &SingleThreadToken) {
+        fn remove(element: &Element, property: &str, token: &SingleThreadToken) {
             let mut inline_declarations = element.style_attribute.borrow_mut();
             if let &mut Some(ref mut declarations) = &mut *inline_declarations {
                 let mut importance = None;
-                let index = declarations.borrow().declarations.iter().position(|&(ref decl, i)| {
+                let index = declarations.borrow(token).declarations
+                            .iter().position(|&(ref decl, i)| {
                     let matching = decl.matches(property);
                     if matching {
                         importance = Some(i)
@@ -777,7 +779,7 @@ impl Element {
                     matching
                 });
                 if let Some(index) = index {
-                    let mut declarations = Arc::make_mut(declarations).borrow_mut();
+                    let mut declarations = declarations.borrow_mut(token);
                     declarations.declarations.remove(index);
                     if importance.unwrap().important() {
                         declarations.important_count -= 1;
@@ -786,21 +788,23 @@ impl Element {
             }
         }
 
-        remove(self, property);
-        self.sync_property_with_attrs_style();
+        remove(self, property, token);
+        self.sync_property_with_attrs_style(token);
     }
 
     pub fn update_inline_style(&self,
                                declarations: Vec<PropertyDeclaration>,
-                               importance: Importance) {
+                               importance: Importance,
+                               token: &SingleThreadToken) {
         fn update(element: &Element, declarations: Vec<PropertyDeclaration>,
-                  importance: Importance) {
+                  importance: Importance,
+                  token: &SingleThreadToken) {
             let mut inline_declarations = element.style_attribute().borrow_mut();
             if let &mut Some(ref mut declaration_block) = &mut *inline_declarations {
                 {
                     // Usually, the reference count will be 1 here. But transitions could make it greater
                     // than that.
-                    let mut declaration_block = Arc::make_mut(declaration_block).borrow_mut();
+                    let mut declaration_block = declaration_block.borrow_mut(token);
                     let declaration_block = &mut *declaration_block;
                     let existing_declarations = &mut declaration_block.declarations;
 
@@ -835,25 +839,26 @@ impl Element {
                 0
             };
 
-            *inline_declarations = Some(Arc::new(DOMRefCell::new(PropertyDeclarationBlock {
+            *inline_declarations = Some(Arc::new(StyleRefCell::new(PropertyDeclarationBlock {
                 declarations: declarations.into_iter().map(|d| (d, importance)).collect(),
                 important_count: important_count,
             })));
         }
 
-        update(self, declarations, importance);
-        self.sync_property_with_attrs_style();
+        update(self, declarations, importance, token);
+        self.sync_property_with_attrs_style(token);
     }
 
     pub fn set_inline_style_property_priority(&self,
                                               properties: &[&str],
-                                              new_importance: Importance) {
+                                              new_importance: Importance,
+                                              token: &SingleThreadToken) {
         {
             let mut inline_declarations = self.style_attribute().borrow_mut();
             if let &mut Some(ref mut block) = &mut *inline_declarations {
                 // Usually, the reference counts of `from` and `to` will be 1 here. But transitions
                 // could make them greater than that.
-                let mut block = Arc::make_mut(block).borrow_mut();
+                let mut block = block.borrow_mut(token);
                 let block = &mut *block;
                 let declarations = &mut block.declarations;
                 for &mut (ref declaration, ref mut importance) in declarations {
@@ -873,14 +878,15 @@ impl Element {
             }
         }
 
-        self.sync_property_with_attrs_style();
+        self.sync_property_with_attrs_style(token);
     }
 
-    pub fn get_inline_style_declaration<F, R>(&self, property: &str, f: F) -> R
+    pub fn get_inline_style_declaration<F, R>(&self, property: &str,
+                                              token: &SingleThreadToken, f: F) -> R
     where F: FnOnce(Option<&(PropertyDeclaration, Importance)>) -> R {
         let style_attr = self.style_attribute.borrow();
         if let Some(ref block) = *style_attr {
-            let block = block.borrow();
+            let block = block.borrow(token);
             f(block.get(property))
         } else {
             f(None)
@@ -2130,7 +2136,7 @@ impl VirtualMethods for Element {
                 *self.style_attribute.borrow_mut() =
                     mutation.new_value(attr).map(|value| {
                         let win = window_from_node(self);
-                        Arc::new(DOMRefCell::new(parse_style_attribute(
+                        Arc::new(StyleRefCell::new(parse_style_attribute(
                             &value,
                             &doc.base_url(),
                             win.css_error_reporter(),

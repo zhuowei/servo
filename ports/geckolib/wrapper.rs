@@ -39,7 +39,6 @@ use std::sync::Arc;
 use style::data::PrivateStyleData;
 use style::dom::{LayoutIterator, NodeInfo, TDocument, TElement, TNode, TRestyleDamage, UnsafeNode};
 use style::dom::{OpaqueNode, PresentationalHintsSynthetizer};
-use style::domrefcell::DOMRefCell;
 use style::element_state::ElementState;
 use style::error_reporting::StdoutErrorReporter;
 use style::gecko_selector_impl::{GeckoSelectorImpl, NonTSPseudoClass, PseudoElement};
@@ -50,6 +49,7 @@ use style::refcell::{Ref, RefCell, RefMut};
 use style::selector_impl::ElementExt;
 use style::selector_matching::ApplicableDeclarationBlock;
 use style::sink::Push;
+use style::stylerefcell::StyleRefCell;
 use url::Url;
 
 pub struct NonOpaqueStyleData(RefCell<PrivateStyleData>);
@@ -447,7 +447,7 @@ impl<'le> TElement for GeckoElement<'le> {
         unsafe { GeckoNode(&*(self.0 as *const _ as *const RawGeckoNode)) }
     }
 
-    fn style_attribute(&self) -> Option<&Arc<DOMRefCell<PropertyDeclarationBlock>>> {
+    fn style_attribute(&self) -> Option<&Arc<StyleRefCell<PropertyDeclarationBlock>>> {
         let declarations = unsafe { Gecko_GetServoDeclarationBlock(self.0) };
         if declarations.is_null() {
             None

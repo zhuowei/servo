@@ -33,7 +33,6 @@ use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 use style::arc_ptr_eq;
 use style::context::{LocalStyleContextCreationInfo, ReflowGoal, SharedStyleContext};
 use style::dom::{NodeInfo, TDocument, TElement, TNode};
-use style::domrefcell::DOMRefCell;
 use style::error_reporting::StdoutErrorReporter;
 use style::gecko_selector_impl::{GeckoSelectorImpl, PseudoElement};
 use style::parallel;
@@ -43,6 +42,7 @@ use style::selector_impl::PseudoElementCascadeType;
 use style::sequential;
 use style::stylesheets::{Origin, Stylesheet};
 use style::timer::Timer;
+use style::stylerefcell::StyleRefCell;
 use traversal::RecalcStyleOnly;
 use url::Url;
 use wrapper::{DUMMY_BASE_URL, GeckoDocument, GeckoElement, GeckoNode};
@@ -339,7 +339,7 @@ pub extern "C" fn Servo_StyleSet_Drop(data: RawServoStyleSetOwned) -> () {
 }
 
 pub struct GeckoDeclarationBlock {
-    pub declarations: Option<Arc<DOMRefCell<PropertyDeclarationBlock>>>,
+    pub declarations: Option<Arc<StyleRefCell<PropertyDeclarationBlock>>>,
     // XXX The following two fields are made atomic to work around the
     // ownership system so that they can be changed inside a shared
     // instance. It wouldn't provide safety as Rust usually promises,
@@ -362,7 +362,7 @@ pub extern "C" fn Servo_ParseStyleAttribute(bytes: *const u8, length: u32,
     let value = unsafe { from_utf8_unchecked(slice::from_raw_parts(bytes, length as usize)) };
     Arc::new(GeckoDeclarationBlock {
         declarations: GeckoElement::parse_style_attribute(value).map(|block| {
-            Arc::new(DOMRefCell::new(block))
+            Arc::new(StyleRefCell::new(block))
         }),
         cache: AtomicPtr::new(cache),
         immutable: AtomicBool::new(false),

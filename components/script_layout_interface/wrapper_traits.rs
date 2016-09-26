@@ -14,7 +14,7 @@ use std::fmt::Debug;
 use std::sync::Arc;
 use string_cache::{Atom, Namespace};
 use style::computed_values::display;
-use style::context::SharedStyleContext;
+use style::context::{StyleContext, SharedStyleContext};
 use style::dom::{LayoutIterator, NodeInfo, PresentationalHintsSynthetizer, TNode};
 use style::dom::OpaqueNode;
 use style::properties::ServoComputedValues;
@@ -240,7 +240,9 @@ pub trait ThreadSafeLayoutNode: Clone + Copy + NodeInfo + PartialEq + Sized {
     ///
     /// Unlike the version on TNode, this handles pseudo-elements.
     #[inline]
-    fn style(&self, context: &SharedStyleContext) -> Ref<Arc<ServoComputedValues>> {
+    fn style<'a, Ctx>(&self, context: &Ctx) -> Ref<Arc<ServoComputedValues>>
+        where Ctx: StyleContext<'a>
+    {
         match self.get_pseudo_element_type() {
             PseudoElementType::Normal => {
                 Ref::map(self.get_style_data().unwrap().borrow(), |data| {
@@ -262,9 +264,12 @@ pub trait ThreadSafeLayoutNode: Clone + Copy + NodeInfo + PartialEq + Sized {
                                 .per_pseudo.contains_key(&style_pseudo) {
                             let mut data = self.get_style_data().unwrap().borrow_mut();
                             let new_style =
-                                context.stylist
-                                       .precomputed_values_for_pseudo(&style_pseudo,
-                                                                      data.style_data.style.as_ref());
+                                context.shared_context()
+                                       .stylist
+                                       .precomputed_values_for_pseudo(
+                                            &style_pseudo,
+                                            data.style_data.style.as_ref(),
+                                            context.stylerefcell_token());
                             data.style_data.per_pseudo
                                 .insert(style_pseudo.clone(), new_style.unwrap());
                         }
@@ -278,11 +283,13 @@ pub trait ThreadSafeLayoutNode: Clone + Copy + NodeInfo + PartialEq + Sized {
                                 .per_pseudo.contains_key(&style_pseudo) {
                             let mut data = self.get_style_data().unwrap().borrow_mut();
                             let new_style =
-                                context.stylist
+                                context.shared_context()
+                                       .stylist
                                        .lazily_compute_pseudo_element_style(
                                            &self.as_element(),
                                            &style_pseudo,
-                                           data.style_data.style.as_ref().unwrap());
+                                           data.style_data.style.as_ref().unwrap(),
+                                           context.stylerefcell_token());
                             data.style_data.per_pseudo
                                 .insert(style_pseudo.clone(), new_style.unwrap());
                         }
@@ -340,7 +347,8 @@ pub trait ThreadSafeLayoutNode: Clone + Copy + NodeInfo + PartialEq + Sized {
         };
     }
 
-    fn is_ignorable_whitespace(&self, context: &SharedStyleContext) -> bool;
+    fn is_ignorable_whitespace<'a, Ctx>(&self, context: &Ctx) -> bool
+                              where Ctx: StyleContext<'a>;
 
     fn restyle_damage(self) -> RestyleDamage;
 

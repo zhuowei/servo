@@ -15,6 +15,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
 use std::sync::mpsc::Sender;
+use stylerefcell::ReadOnlyToken;
 use timer::Timer;
 
 /// This structure is used to create a local style context from a shared one.
@@ -70,14 +71,17 @@ pub struct LocalStyleContext {
     /// A channel on which new animations that have been triggered by style
     /// recalculation can be sent.
     pub new_animations_sender: Sender<Animation>,
+    pub stylerefcell_token: ReadOnlyToken,
 }
 
 impl LocalStyleContext {
-    pub fn new(local_context_creation_data: &LocalStyleContextCreationInfo) -> Self {
+    pub fn new(local_context_creation_data: &LocalStyleContextCreationInfo,
+               token: ReadOnlyToken) -> Self {
         LocalStyleContext {
             applicable_declarations_cache: RefCell::new(ApplicableDeclarationsCache::new()),
             style_sharing_candidate_cache: RefCell::new(StyleSharingCandidateCache::new()),
             new_animations_sender: local_context_creation_data.new_animations_sender.clone(),
+            stylerefcell_token: token,
         }
     }
 }
@@ -85,6 +89,9 @@ impl LocalStyleContext {
 pub trait StyleContext<'a> {
     fn shared_context(&self) -> &'a SharedStyleContext;
     fn local_context(&self) -> &LocalStyleContext;
+    fn stylerefcell_token(&self) -> &ReadOnlyToken {
+        &self.local_context().stylerefcell_token
+    }
 }
 
 /// Why we're doing reflow.

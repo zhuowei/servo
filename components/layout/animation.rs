@@ -4,7 +4,7 @@
 
 //! CSS transitions and animations.
 
-use context::SharedLayoutContext;
+use context::LayoutContext;
 use flow::{self, Flow};
 use gfx::display_list::OpaqueNode;
 use ipc_channel::ipc::IpcSender;
@@ -123,7 +123,7 @@ pub fn update_animation_state(constellation_chan: &IpcSender<ConstellationMsg>,
 // NB: This is specific for ServoSelectorImpl, since the layout context and the
 // flows are ServoSelectorImpl specific too. If that goes away at some point,
 // this should be made generic.
-pub fn recalc_style_for_animations(context: &SharedLayoutContext,
+pub fn recalc_style_for_animations(context: &LayoutContext,
                                    flow: &mut Flow,
                                    animations: &HashMap<OpaqueNode,
                                                         Vec<Animation>>) {
@@ -132,7 +132,7 @@ pub fn recalc_style_for_animations(context: &SharedLayoutContext,
         if let Some(ref animations) = animations.get(&fragment.node) {
             for animation in animations.iter() {
                 let old_style = fragment.style.clone();
-                update_style_for_animation(&context.style_context,
+                update_style_for_animation(context,
                                            animation,
                                            &mut fragment.style);
                 damage |= RestyleDamage::compute(&old_style, &fragment.style);

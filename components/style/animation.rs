@@ -5,7 +5,7 @@
 //! CSS transitions and animations.
 
 use bezier::Bezier;
-use context::SharedStyleContext;
+use context::{StyleContext, SharedStyleContext};
 use dom::OpaqueNode;
 use euclid::point::Point2D;
 use keyframes::{KeyframesStep, KeyframesStepValue};
@@ -374,11 +374,13 @@ pub fn start_transitions_if_applicable(new_animations_sender: &Sender<Animation>
     had_animations
 }
 
-fn compute_style_for_animation_step(context: &SharedStyleContext,
-                                    step: &KeyframesStep,
-                                    previous_style: &ComputedValues,
-                                    style_from_cascade: &ComputedValues)
-                                    -> ComputedValues {
+fn compute_style_for_animation_step<'a, Ctx>(context: &Ctx,
+                                             step: &KeyframesStep,
+                                             previous_style: &ComputedValues,
+                                             style_from_cascade: &ComputedValues)
+                                             -> ComputedValues
+    where Ctx: StyleContext<'a>
+{
     match step.value {
         // TODO: avoiding this spurious clone might involve having to create
         // an Arc in the below (more common case).
@@ -390,13 +392,15 @@ fn compute_style_for_animation_step(context: &SharedStyleContext,
                 source_order: 0,
                 specificity: ::std::u32::MAX,
             };
-            let (computed, _) = properties::cascade(context.viewport_size,
+            let shared_context = context.shared_context();
+            let (computed, _) = properties::cascade(shared_context.viewport_size,
                                                     &[declaration_block],
                                                     false,
                                                     Some(previous_style),
                                                     None,
                                                     None,
-                                                    context.error_reporter.clone());
+                                                    shared_context.error_reporter.clone(),
+                                                    context.stylerefcell_token());
             computed
         }
     }
@@ -492,16 +496,19 @@ pub fn update_style_for_animation_frame(mut new_style: &mut Arc<ComputedValues>,
 }
 /// Updates a single animation and associated style based on the current time.
 /// If `damage` is provided, inserts the appropriate restyle damage.
-pub fn update_style_for_animation(context: &SharedStyleContext,
-                                  animation: &Animation,
-                                  style: &mut Arc<ComputedValues>) {
+pub fn update_style_for_animation<'a, Ctx>(context: &Ctx,
+                                           animation: &Animation,
+                                           style: &mut Arc<ComputedValues>)
+    where Ctx: StyleContext<'a>
+{
+    let shared_context = context.shared_context();
     debug!("update_style_for_animation: entering");
     debug_assert!(!animation.is_expired());
 
     match *animation {
         Animation::Transition(_, start_time, ref frame, _) => {
             debug!("update_style_for_animation: transition found");
-            let now = context.timer.seconds();
+            let now = shared_context.timer.seconds();
             let mut new_style = (*style).clone();
             let updated_style = update_style_for_animation_frame(&mut new_style,
                                                                  now, start_time,
@@ -516,11 +523,11 @@ pub fn update_style_for_animation(context: &SharedStyleContext,
             let started_at = state.started_at;
 
             let now = match state.running_state {
-                KeyframesRunningState::Running => context.timer.seconds(),
+                KeyframesRunningState::Running => shared_context.timer.seconds(),
                 KeyframesRunningState::Paused(progress) => started_at + duration * progress,
             };
 
-            let animation = match context.stylist.animations().get(name) {
+            let animation = match shared_context.stylist.animations().get(name) {
                 None => {
                     warn!("update_style_for_animation: Animation {:?} not found", name);
                     return;

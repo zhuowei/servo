@@ -6,10 +6,10 @@ use cssparser::Parser;
 use selectors::parser::{LocalName, ParserContext, parse_selector_list};
 use std::sync::Arc;
 use string_cache::Atom;
-use style::domrefcell::DOMRefCell;
 use style::properties::{PropertyDeclarationBlock, PropertyDeclaration, DeclaredValue};
 use style::properties::{longhands, Importance};
 use style::selector_matching::{Rule, SelectorMap};
+use style::stylerefcell::{StyleRefCell, ReadOnlyToken};
 use style::thread_state;
 
 /// Helper method to get some Rules from selector strings.
@@ -21,7 +21,7 @@ fn get_mock_rules(css_selectors: &[&str]) -> Vec<Vec<Rule>> {
         .unwrap().into_iter().map(|s| {
             Rule {
                 selector: s.complex_selector.clone(),
-                declarations: Arc::new(DOMRefCell::new(PropertyDeclarationBlock {
+                declarations: Arc::new(StyleRefCell::new(PropertyDeclarationBlock {
                     declarations: vec![
                         (PropertyDeclaration::Display(DeclaredValue::Value(
                             longhands::display::SpecifiedValue::block)),
@@ -105,7 +105,7 @@ fn test_get_universal_rules() {
     let map = get_mock_map(&["*|*", "#foo > *|*", ".klass", "#id"]);
     let mut decls = vec![];
 
-    map.get_universal_rules(&mut decls);
+    map.get_universal_rules(&mut decls, unsafe { &ReadOnlyToken::assert() });
 
     assert_eq!(decls.len(), 1);
 }

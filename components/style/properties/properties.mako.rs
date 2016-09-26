@@ -30,6 +30,7 @@ use computed_values;
 use logical_geometry::WritingMode;
 use parser::{ParserContext, ParserContextExtraData, log_css_error};
 use selector_matching::ApplicableDeclarationBlock;
+use stylerefcell::ReadOnlyToken;
 use stylesheets::Origin;
 use values::LocalToCss;
 use values::HasViewportPercentage;
@@ -1730,7 +1731,8 @@ fn cascade_with_cached_declarations(
         cached_style: &ComputedValues,
         custom_properties: Option<Arc<::custom_properties::ComputedValuesMap>>,
         mut cascade_info: Option<<&mut CascadeInfo>,
-        mut error_reporter: StdBox<ParseErrorReporter + Send>)
+        mut error_reporter: StdBox<ParseErrorReporter + Send>,
+        token: &ReadOnlyToken)
         -> ComputedValues {
     let mut context = computed::Context {
         is_root_element: false,
@@ -1755,7 +1757,7 @@ fn cascade_with_cached_declarations(
     // Declaration blocks are stored in increasing precedence order,
     // we want them in decreasing order here.
     for sub_list in applicable_declarations.iter().rev() {
-        for declaration in sub_list.iter().rev() {
+        for declaration in sub_list.iter(token).rev() {
             match *declaration {
                 % for style_struct in data.active_style_structs():
                     % for property in style_struct.longhands:
@@ -1874,7 +1876,8 @@ pub fn cascade(viewport_size: Size2D<Au>,
                parent_style: Option<<&ComputedValues>,
                cached_style: Option<<&ComputedValues>,
                mut cascade_info: Option<<&mut CascadeInfo>,
-               mut error_reporter: StdBox<ParseErrorReporter + Send>)
+               mut error_reporter: StdBox<ParseErrorReporter + Send>,
+               token: &ReadOnlyToken)
                -> (ComputedValues, bool) {
     let initial_values = ComputedValues::initial_values();
     let (is_root_element, inherited_style) = match parent_style {
@@ -1886,7 +1889,7 @@ pub fn cascade(viewport_size: Size2D<Au>,
     let mut custom_properties = None;
     let mut seen_custom = HashSet::new();
     for sub_list in applicable_declarations.iter().rev() {
-        for declaration in sub_list.iter().rev() {
+        for declaration in sub_list.iter(token).rev() {
             match *declaration {
                 PropertyDeclaration::Custom(ref name, ref value) => {
                     ::custom_properties::cascade(
@@ -1908,7 +1911,8 @@ pub fn cascade(viewport_size: Size2D<Au>,
                                                      cached_style,
                                                      custom_properties,
                                                      cascade_info,
-                                                     error_reporter);
+                                                     error_reporter,
+                                                     token);
         return (style, false)
     }
 
@@ -1944,7 +1948,7 @@ pub fn cascade(viewport_size: Size2D<Au>,
     ComputedValues::do_cascade_property(|cascade_property| {
         % for category_to_cascade_now in ["early", "other"]:
             for sub_list in applicable_declarations.iter().rev() {
-                for declaration in sub_list.iter().rev() {
+                for declaration in sub_list.iter(token).rev() {
                     if let PropertyDeclaration::Custom(..) = *declaration {
                         continue
                     }

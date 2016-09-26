@@ -28,6 +28,7 @@ use std::ops::Deref;
 use std::slice::IterMut;
 use std::sync::Arc;
 use string_cache::Atom;
+use stylerefcell::ReadOnlyToken;
 use traversal::RestyleResult;
 use util::opts;
 
@@ -506,7 +507,7 @@ trait PrivateMatchMethods: TNode {
         let mut cacheable = true;
         let shared_context = context.shared_context();
         if animate_properties {
-            cacheable = !self.update_animations_for_cascade(shared_context,
+            cacheable = !self.update_animations_for_cascade(context,
                                                             &mut old_style) && cacheable;
         }
 
@@ -525,7 +526,8 @@ trait PrivateMatchMethods: TNode {
                         Some(&***parent_style),
                         cached_computed_values,
                         Some(&mut cascade_info),
-                        shared_context.error_reporter.clone())
+                        shared_context.error_reporter.clone(),
+                        context.stylerefcell_token())
             }
             None => {
                 cascade(shared_context.viewport_size,
@@ -534,7 +536,8 @@ trait PrivateMatchMethods: TNode {
                         None,
                         None,
                         Some(&mut cascade_info),
-                        shared_context.error_reporter.clone())
+                        shared_context.error_reporter.clone(),
+                        context.stylerefcell_token())
             }
         };
         cascade_info.finish(self);
@@ -577,28 +580,31 @@ trait PrivateMatchMethods: TNode {
         this_style
     }
 
-    fn update_animations_for_cascade(&self,
-                                     context: &SharedStyleContext,
-                                     style: &mut Option<&mut Arc<ComputedValues>>)
-                                     -> bool {
+    fn update_animations_for_cascade<'a, Ctx>(&self,
+                                              context: &Ctx,
+                                              style: &mut Option<&mut Arc<ComputedValues>>)
+                                              -> bool
+        where Ctx: StyleContext<'a>
+    {
         let style = match *style {
             None => return false,
             Some(ref mut style) => style,
         };
 
+        let shared_context = context.shared_context();
         // Finish any expired transitions.
         let this_opaque = self.opaque();
         let had_animations_to_expire =
-            animation::complete_expired_transitions(this_opaque, style, context);
+            animation::complete_expired_transitions(this_opaque, style, shared_context);
 
         // Merge any running transitions into the current style, and cancel them.
-        let had_running_animations = context.running_animations
-                                            .read()
-                                            .unwrap()
-                                            .get(&this_opaque)
-                                            .is_some();
+        let had_running_animations = shared_context.running_animations
+                                                   .read()
+                                                   .unwrap()
+                                                   .get(&this_opaque)
+                                                   .is_some();
         if had_running_animations {
-            let mut all_running_animations = context.running_animations.write().unwrap();
+            let mut all_running_animations = shared_context.running_animations.write().unwrap();
             for mut running_animation in all_running_animations.get_mut(&this_opaque).unwrap() {
                 // This shouldn't happen frequently, but under some
                 // circumstances mainly huge load or debug builds, the
@@ -649,7 +655,8 @@ pub trait ElementMatchMethods : TElement {
     fn match_element(&self,
                      stylist: &Stylist,
                      parent_bf: Option<&BloomFilter>,
-                     applicable_declarations: &mut ApplicableDeclarations)
+                     applicable_declarations: &mut ApplicableDeclarations,
+                     token: &ReadOnlyToken)
                      -> StyleRelations {
         use traversal::relations_are_shareable;
         let style_attribute = self.style_attribute();
@@ -660,7 +667,8 @@ pub trait ElementMatchMethods : TElement {
                                                  style_attribute,
                                                  None,
                                                  &mut applicable_declarations.normal,
-                                                 MatchingReason::ForStyling);
+                                                 MatchingReason::ForStyling,
+                                                 token);
 
         applicable_declarations.normal_shareable = relations_are_shareable(&relations);
 
@@ -670,7 +678,8 @@ pub trait ElementMatchMethods : TElement {
                                                  None,
                                                  Some(&pseudo.clone()),
                                                  applicable_declarations.per_pseudo.entry(pseudo).or_insert(vec![]),
-                                                 MatchingReason::ForStyling);
+                                                 MatchingReason::ForStyling,
+                                                 token);
         });
 
         let has_pseudos =

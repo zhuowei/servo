@@ -30,7 +30,6 @@
 
 #![allow(unsafe_code)]
 
-use dom::bindings::cell::DOMRefCell;
 use dom::bindings::inheritance::{CharacterDataTypeId, ElementTypeId};
 use dom::bindings::inheritance::{HTMLElementTypeId, NodeTypeId};
 use dom::bindings::js::LayoutJS;
@@ -57,7 +56,7 @@ use std::sync::Arc;
 use string_cache::{Atom, Namespace};
 use style::attr::AttrValue;
 use style::computed_values::display;
-use style::context::SharedStyleContext;
+use style::context::StyleContext;
 use style::data::PrivateStyleData;
 use style::dom::{LayoutIterator, NodeInfo, OpaqueNode, PresentationalHintsSynthetizer, TDocument, TElement, TNode};
 use style::dom::UnsafeNode;
@@ -68,6 +67,7 @@ use style::selector_impl::{ElementSnapshot, NonTSPseudoClass, PseudoElement, Ser
 use style::selector_matching::ApplicableDeclarationBlock;
 use style::sink::Push;
 use style::str::is_whitespace;
+use style::stylerefcell::StyleRefCell;
 use url::Url;
 
 #[derive(Copy, Clone)]
@@ -462,7 +462,7 @@ impl<'le> TElement for ServoLayoutElement<'le> {
         ServoLayoutNode::from_layout_js(self.element.upcast())
     }
 
-    fn style_attribute(&self) -> Option<&Arc<DOMRefCell<PropertyDeclarationBlock>>> {
+    fn style_attribute(&self) -> Option<&Arc<StyleRefCell<PropertyDeclarationBlock>>> {
         unsafe {
             (*self.element.style_attribute()).as_ref()
         }
@@ -804,7 +804,9 @@ impl<'ln> ThreadSafeLayoutNode for ServoThreadSafeLayoutNode<'ln> {
         self.node.get_style_and_layout_data()
     }
 
-    fn is_ignorable_whitespace(&self, context: &SharedStyleContext) -> bool {
+    fn is_ignorable_whitespace<'a, Ctx>(&self, context: &Ctx) -> bool
+        where Ctx: StyleContext<'a>
+    {
         unsafe {
             let text: LayoutJS<Text> = match self.get_jsmanaged().downcast() {
                 Some(text) => text,

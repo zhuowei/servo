@@ -5,7 +5,6 @@
 //! Selector matching.
 
 use dom::PresentationalHintsSynthetizer;
-use domrefcell::DOMRefCell;
 use element_state::*;
 use error_reporting::StdoutErrorReporter;
 use keyframes::KeyframesAnimation;
@@ -30,6 +29,7 @@ use std::slice;
 use std::sync::Arc;
 use string_cache::Atom;
 use style_traits::viewport::ViewportConstraints;
+use stylerefcell::{StyleRefCell, ReadOnlyToken};
 use stylesheets::{CSSRule, CSSRuleIteratorExt, Origin, Stylesheet, UserAgentStylesheets};
 use viewport::{MaybeNew, ViewportRuleCascade};
 
@@ -119,7 +119,8 @@ impl Stylist {
     pub fn update(&mut self,
                   doc_stylesheets: &[Arc<Stylesheet>],
                   ua_stylesheets: Option<&UserAgentStylesheets>,
-                  stylesheets_changed: bool) -> bool {
+                  stylesheets_changed: bool,
+                  token: &ReadOnlyToken) -> bool {
         if !(self.is_device_dirty || stylesheets_changed) {
             return false;
         }
@@ -140,23 +141,23 @@ impl Stylist {
 
         if let Some(ua_stylesheets) = ua_stylesheets {
             for stylesheet in &ua_stylesheets.user_or_user_agent_stylesheets {
-                self.add_stylesheet(&stylesheet);
+                self.add_stylesheet(&stylesheet, token);
             }
 
             if self.quirks_mode {
-                self.add_stylesheet(&ua_stylesheets.quirks_mode_stylesheet);
+                self.add_stylesheet(&ua_stylesheets.quirks_mode_stylesheet, token);
             }
         }
 
         for ref stylesheet in doc_stylesheets.iter() {
-            self.add_stylesheet(stylesheet);
+            self.add_stylesheet(stylesheet, token);
         }
 
         self.is_device_dirty = false;
         true
     }
 
-    fn add_stylesheet(&mut self, stylesheet: &Stylesheet) {
+    fn add_stylesheet(&mut self, stylesheet: &Stylesheet, token: &ReadOnlyToken) {
         if !stylesheet.is_effective_for_device(&self.device) {
             return;
         }
@@ -199,7 +200,8 @@ impl Stylist {
                 }
                 CSSRule::Keyframes(ref keyframes_rule) => {
                     debug!("Found valid keyframes rule: {:?}", keyframes_rule);
-                    if let Some(animation) = KeyframesAnimation::from_keyframes(&keyframes_rule.keyframes) {
+                    if let Some(animation) = KeyframesAnimation::from_keyframes(
+                            &keyframes_rule.keyframes, token) {
                         debug!("Found valid keyframe animation: {:?}", animation);
                         self.animations.insert(keyframes_rule.name.clone(),
                                                animation);
@@ -230,7 +232,7 @@ impl Stylist {
             if let Some(map) = self.pseudos_map.remove(&pseudo) {
                 let mut declarations = vec![];
 
-                map.user_agent.get_universal_rules(&mut declarations);
+                map.user_agent.get_universal_rules(&mut declarations, token);
 
                 self.precomputed_pseudo_element_decls.insert(pseudo, declarations);
             }
@@ -241,7 +243,8 @@ impl Stylist {
     /// universal rules and applying them.
     pub fn precomputed_values_for_pseudo(&self,
                                          pseudo: &PseudoElement,
-                                         parent: Option<&Arc<ComputedValues>>)
+                                         parent: Option<&Arc<ComputedValues>>,
+                                         token: &ReadOnlyToken)
                                          -> Option<Arc<ComputedValues>> {
         debug_assert!(TheSelectorImpl::pseudo_element_cascade_type(pseudo).is_precomputed());
         if let Some(declarations) = self.precomputed_pseudo_element_decls.get(pseudo) {
@@ -251,7 +254,8 @@ impl Stylist {
                                     parent.map(|p| &**p),
                                     None,
                                     None,
-                                    Box::new(StdoutErrorReporter));
+                                    Box::new(StdoutErrorReporter),
+                                    token);
             Some(Arc::new(computed))
         } else {
             parent.map(|p| p.clone())
@@ -261,7 +265,8 @@ impl Stylist {
     pub fn lazily_compute_pseudo_element_style<E>(&self,
                                                   element: &E,
                                                   pseudo: &PseudoElement,
-                                                  parent: &Arc<ComputedValues>)
+                                                  parent: &Arc<ComputedValues>,
+                                                  token: &ReadOnlyToken)
                                                   -> Option<Arc<ComputedValues>>
         where E: Element<Impl=TheSelectorImpl> +
               fmt::Debug +
@@ -281,13 +286,15 @@ impl Stylist {
                                           None,
                                           Some(pseudo),
                                           &mut declarations,
-                                          MatchingReason::ForStyling);
+                                          MatchingReason::ForStyling,
+                                          token);
 
         let (computed, _) =
             properties::cascade(self.device.au_viewport_size(),
                                 &declarations, false,
                                 Some(&**parent), None, None,
-                                Box::new(StdoutErrorReporter));
+                                Box::new(StdoutErrorReporter),
+                                token);
 
 
         Some(Arc::new(computed))
@@ -331,10 +338,13 @@ impl Stylist {
                                         &self,
                                         element: &E,
                                         parent_bf: Option<&BloomFilter>,
-                                        style_attribute: Option<&Arc<DOMRefCell<PropertyDeclarationBlock>>>,
+                                        style_attribute: Option<&
+                                            Arc<StyleRefCell<PropertyDeclarationBlock>>>,
                                         pseudo_element: Option<&PseudoElement>,
                                         applicable_declarations: &mut V,
-                                        reason: MatchingReason) -> StyleRelations
+                                        reason: MatchingReason,
+                                        token: &ReadOnlyToken)
+                                        -> StyleRelations
         where E: Element<Impl=TheSelectorImpl> +
                  fmt::Debug +
                  PresentationalHintsSynthetizer,
@@ -361,7 +371,8 @@ impl Stylist {
                                               applicable_declarations,
                                               &mut relations,
                                               reason,
-                                              Importance::Normal);
+                                              Importance::Normal,
+                                              token);
         debug!("UA normal: {:?}", relations);
 
         // Step 2: Presentational hints.
@@ -379,20 +390,21 @@ impl Stylist {
                                         applicable_declarations,
                                         &mut relations,
                                         reason,
-                                        Importance::Normal);
+                                        Importance::Normal,
+                                        token);
         debug!("user normal: {:?}", relations);
         map.author.get_all_matching_rules(element,
                                           parent_bf,
                                           applicable_declarations,
                                           &mut relations,
                                           reason,
-                                          Importance::Normal);
+                                          Importance::Normal,
+                                          token);
         debug!("author normal: {:?}", relations);
 
         // Step 4: Normal style attributes.
         if let Some(sa) = style_attribute {
-            // FIXME: Is this thread-safe?
-            if unsafe { sa.borrow_for_layout() }.any_normal() {
+            if sa.borrow_read_only(token).any_normal() {
                 relations |= AFFECTED_BY_STYLE_ATTRIBUTE;
                 Push::push(
                     applicable_declarations,
@@ -408,14 +420,14 @@ impl Stylist {
                                           applicable_declarations,
                                           &mut relations,
                                           reason,
-                                          Importance::Important);
+                                          Importance::Important,
+                                          token);
 
         debug!("author important: {:?}", relations);
 
         // Step 6: `!important` style attributes.
         if let Some(sa) = style_attribute {
-            // FIXME: Is this thread-safe?
-            if unsafe { sa.borrow_for_layout() }.any_important() {
+            if sa.borrow_read_only(token).any_important() {
                 relations |= AFFECTED_BY_STYLE_ATTRIBUTE;
                 Push::push(
                     applicable_declarations,
@@ -431,7 +443,8 @@ impl Stylist {
                                         applicable_declarations,
                                         &mut relations,
                                         reason,
-                                        Importance::Important);
+                                        Importance::Important,
+                                        token);
 
         debug!("user important: {:?}", relations);
 
@@ -440,7 +453,8 @@ impl Stylist {
                                               applicable_declarations,
                                               &mut relations,
                                               reason,
-                                              Importance::Important);
+                                              Importance::Important,
+                                              token);
 
         debug!("UA important: {:?}", relations);
 
@@ -632,7 +646,8 @@ impl SelectorMap {
                                         matching_rules_list: &mut V,
                                         relations: &mut StyleRelations,
                                         reason: MatchingReason,
-                                        importance: Importance)
+                                        importance: Importance,
+                                        token: &ReadOnlyToken)
         where E: Element<Impl=TheSelectorImpl>,
               V: VecLike<ApplicableDeclarationBlock>
     {
@@ -650,7 +665,8 @@ impl SelectorMap {
                                                       matching_rules_list,
                                                       relations,
                                                       reason,
-                                                      importance)
+                                                      importance,
+                                                      token)
         }
 
         element.each_class(|class| {
@@ -661,7 +677,8 @@ impl SelectorMap {
                                                       matching_rules_list,
                                                       relations,
                                                       reason,
-                                                      importance);
+                                                      importance,
+                                                      token);
         });
 
         let local_name_hash = if element.is_html_element_in_html_document() {
@@ -676,7 +693,8 @@ impl SelectorMap {
                                                   matching_rules_list,
                                                   relations,
                                                   reason,
-                                                  importance);
+                                                  importance,
+                                                  token);
 
         SelectorMap::get_matching_rules(element,
                                         parent_bf,
@@ -684,7 +702,8 @@ impl SelectorMap {
                                         matching_rules_list,
                                         relations,
                                         reason,
-                                        importance);
+                                        importance,
+                                        token);
 
         // Sort only the rules we just added.
         sort_by_key(&mut matching_rules_list[init_len..],
@@ -695,7 +714,8 @@ impl SelectorMap {
     /// `self` sorted by specifity and source order.
     #[allow(unsafe_code)]
     pub fn get_universal_rules<V>(&self,
-                                  matching_rules_list: &mut V)
+                                  matching_rules_list: &mut V,
+                                  token: &ReadOnlyToken)
         where V: VecLike<ApplicableDeclarationBlock>
     {
         if self.empty {
@@ -707,8 +727,7 @@ impl SelectorMap {
         for rule in self.other_rules.iter() {
             if rule.selector.compound_selector.is_empty() &&
                rule.selector.next.is_none() {
-                // FIXME: Is this thread-safe?
-                let block = unsafe { rule.declarations.borrow_for_layout() };
+                let block = rule.declarations.borrow_read_only(token);
                 if block.any_normal() {
                     matching_rules_list.push(
                         rule.to_applicable_declaration_block(Importance::Normal));
@@ -732,7 +751,8 @@ impl SelectorMap {
         matching_rules: &mut Vector,
         relations: &mut StyleRelations,
         reason: MatchingReason,
-        importance: Importance)
+        importance: Importance,
+        token: &ReadOnlyToken)
         where E: Element<Impl=TheSelectorImpl>,
               Str: Borrow<BorrowedStr> + Eq + Hash,
               BorrowedStr: Eq + Hash,
@@ -745,7 +765,7 @@ impl SelectorMap {
                                             matching_rules,
                                             relations,
                                             reason,
-                                            importance)
+                                            importance, token)
         }
     }
 
@@ -757,13 +777,13 @@ impl SelectorMap {
                                 matching_rules: &mut V,
                                 relations: &mut StyleRelations,
                                 reason: MatchingReason,
-                                importance: Importance)
+                                importance: Importance,
+                                token: &ReadOnlyToken)
         where E: Element<Impl=TheSelectorImpl>,
               V: VecLike<ApplicableDeclarationBlock>
     {
         for rule in rules.iter() {
-            // FIXME: Is this thread-safe?
-            let block = unsafe { rule.declarations.borrow_for_layout() };
+            let block = rule.declarations.borrow_read_only(token);
             let any_declaration_for_importance = if importance.important() {
                 block.any_important()
             } else {
@@ -849,7 +869,7 @@ pub struct Rule {
     // that it matches. Selector contains an owned vector (through
     // ComplexSelector) and we want to avoid the allocation.
     pub selector: Arc<ComplexSelector<TheSelectorImpl>>,
-    pub declarations: Arc<DOMRefCell<PropertyDeclarationBlock>>,
+    pub declarations: Arc<StyleRefCell<PropertyDeclarationBlock>>,
     pub source_order: usize,
     pub specificity: u32,
 }
@@ -873,7 +893,7 @@ impl Rule {
 pub struct ApplicableDeclarationBlock {
     /// Contains declarations of either importance, but only those of self.importance are relevant.
     /// Use ApplicableDeclarationBlock::iter
-    pub mixed_declarations: Arc<DOMRefCell<PropertyDeclarationBlock>>,
+    pub mixed_declarations: Arc<StyleRefCell<PropertyDeclarationBlock>>,
     pub importance: Importance,
     pub source_order: usize,
     pub specificity: u32,
@@ -881,7 +901,7 @@ pub struct ApplicableDeclarationBlock {
 
 impl ApplicableDeclarationBlock {
     #[inline]
-    pub fn from_declarations(declarations: Arc<DOMRefCell<PropertyDeclarationBlock>>,
+    pub fn from_declarations(declarations: Arc<StyleRefCell<PropertyDeclarationBlock>>,
                              importance: Importance)
                              -> Self {
         ApplicableDeclarationBlock {
@@ -893,10 +913,9 @@ impl ApplicableDeclarationBlock {
     }
 
     #[allow(unsafe_code)]
-    pub fn iter(&self) -> ApplicableDeclarationBlockIter {
+    pub fn iter(&self, token: &ReadOnlyToken) -> ApplicableDeclarationBlockIter {
         ApplicableDeclarationBlockIter {
-            // FIXME: Is this thread-safe?
-            iter: unsafe { self.mixed_declarations.borrow_for_layout() }.declarations.iter(),
+            iter: self.mixed_declarations.borrow_read_only(token).declarations.iter(),
             importance: self.importance,
         }
     }

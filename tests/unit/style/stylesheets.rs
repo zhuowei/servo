@@ -9,7 +9,6 @@ use std::borrow::ToOwned;
 use std::sync::Arc;
 use std::sync::Mutex;
 use string_cache::{Atom, Namespace as NsAtom};
-use style::domrefcell::DOMRefCell;
 use style::error_reporting::ParseErrorReporter;
 use style::keyframes::{Keyframe, KeyframeSelector, KeyframePercentage};
 use style::parser::ParserContextExtraData;
@@ -17,11 +16,15 @@ use style::properties::{PropertyDeclaration, PropertyDeclarationBlock, DeclaredV
 use style::properties::Importance;
 use style::properties::longhands::animation_play_state;
 use style::stylesheets::{Stylesheet, NamespaceRule, CSSRule, StyleRule, KeyframesRule, Origin};
+use style::stylerefcell::{self, StyleRefCell};
 use style::values::specified::{LengthOrPercentageOrAuto, Percentage};
 use url::Url;
 
 #[test]
 fn test_parse_stylesheet() {
+    unsafe {
+        stylerefcell::set_unit_testing_thread_local_flag(true)
+    }
     let css = r"
         @namespace url(http://www.w3.org/1999/xhtml);
         /* FIXME: only if scripting is enabled */
@@ -98,7 +101,7 @@ fn test_parse_stylesheet() {
                         specificity: (0 << 20) + (1 << 10) + (1 << 0),
                     },
                 ],
-                block: Arc::new(DOMRefCell::new(PropertyDeclarationBlock {
+                block: Arc::new(StyleRefCell::new(PropertyDeclarationBlock {
                     declarations: vec![
                         (PropertyDeclaration::Display(DeclaredValue::Value(
                             longhands::display::SpecifiedValue::none)),
@@ -146,7 +149,7 @@ fn test_parse_stylesheet() {
                         specificity: (0 << 20) + (0 << 10) + (1 << 0),
                     },
                 ],
-                block: Arc::new(DOMRefCell::new(PropertyDeclarationBlock {
+                block: Arc::new(StyleRefCell::new(PropertyDeclarationBlock {
                     declarations: vec![
                         (PropertyDeclaration::Display(DeclaredValue::Value(
                             longhands::display::SpecifiedValue::block)),
@@ -181,7 +184,7 @@ fn test_parse_stylesheet() {
                         specificity: (1 << 20) + (1 << 10) + (0 << 0),
                     },
                 ],
-                block: Arc::new(DOMRefCell::new(PropertyDeclarationBlock {
+                block: Arc::new(StyleRefCell::new(PropertyDeclarationBlock {
                     declarations: vec![
                         (PropertyDeclaration::BackgroundColor(DeclaredValue::Value(
                             longhands::background_color::SpecifiedValue {
@@ -237,7 +240,7 @@ fn test_parse_stylesheet() {
                     Arc::new(Keyframe {
                         selector: KeyframeSelector::new_for_unit_testing(
                                       vec![KeyframePercentage::new(0.)]),
-                        block: Arc::new(DOMRefCell::new(PropertyDeclarationBlock {
+                        block: Arc::new(StyleRefCell::new(PropertyDeclarationBlock {
                             declarations: vec![
                                 (PropertyDeclaration::Width(DeclaredValue::Value(
                                     LengthOrPercentageOrAuto::Percentage(Percentage(0.)))),
@@ -249,7 +252,7 @@ fn test_parse_stylesheet() {
                     Arc::new(Keyframe {
                         selector: KeyframeSelector::new_for_unit_testing(
                                       vec![KeyframePercentage::new(1.)]),
-                        block: Arc::new(DOMRefCell::new(PropertyDeclarationBlock {
+                        block: Arc::new(StyleRefCell::new(PropertyDeclarationBlock {
                             declarations: vec![
                                 (PropertyDeclaration::Width(DeclaredValue::Value(
                                     LengthOrPercentageOrAuto::Percentage(Percentage(1.)))),

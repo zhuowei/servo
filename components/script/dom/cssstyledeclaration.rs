@@ -3,7 +3,6 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 use cssparser::ToCss;
-use dom::bindings::cell::DOMRefCell;
 use dom::bindings::codegen::Bindings::CSSStyleDeclarationBinding::{self, CSSStyleDeclarationMethods};
 use dom::bindings::error::{Error, ErrorResult, Fallible};
 use dom::bindings::global::GlobalRef;
@@ -21,6 +20,7 @@ use style::parser::ParserContextExtraData;
 use style::properties::{Shorthand, Importance};
 use style::properties::{is_supported_property, parse_one_declaration, parse_style_attribute};
 use style::selector_impl::PseudoElement;
+use style::stylerefcell::{StyleRefCell, SingleThreadToken};
 
 // http://dev.w3.org/csswg/cssom/#the-cssstyledeclaration-interface
 #[dom_struct]
@@ -89,10 +89,14 @@ impl CSSStyleDeclaration {
 
 impl CSSStyleDeclarationMethods for CSSStyleDeclaration {
     // https://dev.w3.org/csswg/cssom/#dom-cssstyledeclaration-length
+    #[allow(unsafe_code)]
     fn Length(&self) -> u32 {
+        let token = unsafe { SingleThreadToken::assert() };
         let elem = self.owner.upcast::<Element>();
         let len = match *elem.style_attribute().borrow() {
-            Some(ref declarations) => declarations.borrow().declarations.len(),
+            Some(ref declarations) => {
+                declarations.borrow(&token).declarations.len()
+            }
             None => 0,
         };
         len as u32
@@ -104,6 +108,7 @@ impl CSSStyleDeclarationMethods for CSSStyleDeclaration {
     }
 
     // https://dev.w3.org/csswg/cssom/#dom-cssstyledeclaration-getpropertyvalue
+    #[allow(unsafe_code)]
     fn GetPropertyValue(&self, mut property: DOMString) -> DOMString {
         let owner = &self.owner;
 
@@ -120,7 +125,8 @@ impl CSSStyleDeclarationMethods for CSSStyleDeclaration {
         if let Some(shorthand) = Shorthand::from_name(&property) {
             let style_attribute = owner.style_attribute().borrow();
             let style_attribute = if let Some(ref style_attribute) = *style_attribute {
-                style_attribute.borrow()
+                let token = unsafe { SingleThreadToken::assert() };
+                style_attribute.borrow(&token)
             } else {
                 // shorthand.longhands() is never empty, so with no style attribute
                 // step 2.2.2 would do this:
@@ -150,13 +156,15 @@ impl CSSStyleDeclarationMethods for CSSStyleDeclaration {
         }
 
         // Step 3 & 4
-        owner.get_inline_style_declaration(&property, |d| match d {
+        let token = unsafe { SingleThreadToken::assert() };
+        owner.get_inline_style_declaration(&property, &token, |d| match d {
             Some(declaration) => DOMString::from(declaration.0.value()),
             None => DOMString::new(),
         })
     }
 
     // https://dev.w3.org/csswg/cssom/#dom-cssstyledeclaration-getpropertypriority
+    #[allow(unsafe_code)]
     fn GetPropertyPriority(&self, mut property: DOMString) -> DOMString {
         // Step 1
         property.make_ascii_lowercase();
@@ -172,7 +180,8 @@ impl CSSStyleDeclarationMethods for CSSStyleDeclaration {
             }
         } else {
             // Step 3
-            return self.owner.get_inline_style_declaration(&property, |d| {
+            let token = unsafe { SingleThreadToken::assert() };
+            return self.owner.get_inline_style_declaration(&property, &token, |d| {
                 if let Some(decl) = d {
                     if decl.1.important() {
                         return DOMString::from("important");
@@ -189,6 +198,7 @@ impl CSSStyleDeclarationMethods for CSSStyleDeclaration {
     }
 
     // https://dev.w3.org/csswg/cssom/#dom-cssstyledeclaration-setproperty
+    #[allow(unsafe_code)]
     fn SetProperty(&self,
                    mut property: DOMString,
                    value: DOMString,
@@ -236,7 +246,8 @@ impl CSSStyleDeclarationMethods for CSSStyleDeclaration {
 
         // Step 8
         // Step 9
-        element.update_inline_style(declarations, priority);
+        let token = unsafe { SingleThreadToken::assert() };
+        element.update_inline_style(declarations, priority, &token);
 
         let node = element.upcast::<Node>();
         node.dirty(NodeDamage::NodeStyleDamaged);
@@ -244,6 +255,7 @@ impl CSSStyleDeclarationMethods for CSSStyleDeclaration {
     }
 
     // https://dev.w3.org/csswg/cssom/#dom-cssstyledeclaration-setpropertypriority
+    #[allow(unsafe_code)]
     fn SetPropertyPriority(&self, property: DOMString, priority: DOMString) -> ErrorResult {
         // Step 1
         if self.readonly {
@@ -265,11 +277,12 @@ impl CSSStyleDeclarationMethods for CSSStyleDeclaration {
         let element = self.owner.upcast::<Element>();
 
         // Step 5 & 6
+        let token = unsafe { SingleThreadToken::assert() };
         match Shorthand::from_name(&property) {
             Some(shorthand) => {
-                element.set_inline_style_property_priority(shorthand.longhands(), priority)
+                element.set_inline_style_property_priority(shorthand.longhands(), priority, &token)
             }
-            None => element.set_inline_style_property_priority(&[&*property], priority),
+            None => element.set_inline_style_property_priority(&[&*property], priority, &token),
         }
 
         let node = element.upcast::<Node>();
@@ -283,6 +296,7 @@ impl CSSStyleDeclarationMethods for CSSStyleDeclaration {
     }
 
     // https://dev.w3.org/csswg/cssom/#dom-cssstyledeclaration-removeproperty
+    #[allow(unsafe_code)]
     fn RemoveProperty(&self, mut property: DOMString) -> Fallible<DOMString> {
         // Step 1
         if self.readonly {
@@ -297,15 +311,16 @@ impl CSSStyleDeclarationMethods for CSSStyleDeclaration {
 
         let element = self.owner.upcast::<Element>();
 
+        let token = unsafe { SingleThreadToken::assert() };
         match Shorthand::from_name(&property) {
             // Step 4
             Some(shorthand) => {
                 for longhand in shorthand.longhands() {
-                    element.remove_inline_style_property(longhand)
+                    element.remove_inline_style_property(longhand, &token)
                 }
             }
             // Step 5
-            None => element.remove_inline_style_property(&property),
+            None => element.remove_inline_style_property(&property, &token),
         }
 
         let node = element.upcast::<Node>();
@@ -326,12 +341,14 @@ impl CSSStyleDeclarationMethods for CSSStyleDeclaration {
     }
 
     // https://dev.w3.org/csswg/cssom/#the-cssstyledeclaration-interface
+    #[allow(unsafe_code)]
     fn IndexedGetter(&self, index: u32) -> Option<DOMString> {
         let index = index as usize;
         let elem = self.owner.upcast::<Element>();
         let style_attribute = elem.style_attribute().borrow();
         style_attribute.as_ref().and_then(|declarations| {
-            declarations.borrow().declarations.get(index).map(|entry| {
+            let token = unsafe { SingleThreadToken::assert() };
+            declarations.borrow(&token).declarations.get(index).map(|entry| {
                 let (ref declaration, importance) = *entry;
                 let mut css = declaration.to_css_string();
                 if importance.important() {
@@ -343,18 +360,21 @@ impl CSSStyleDeclarationMethods for CSSStyleDeclaration {
     }
 
     // https://drafts.csswg.org/cssom/#dom-cssstyledeclaration-csstext
+    #[allow(unsafe_code)]
     fn CssText(&self) -> DOMString {
         let elem = self.owner.upcast::<Element>();
         let style_attribute = elem.style_attribute().borrow();
 
         if let Some(declarations) = style_attribute.as_ref() {
-            DOMString::from(declarations.borrow().to_css_string())
+            let token = unsafe { SingleThreadToken::assert() };
+            DOMString::from(declarations.borrow(&token).to_css_string())
         } else {
             DOMString::new()
         }
     }
 
     // https://drafts.csswg.org/cssom/#dom-cssstyledeclaration-csstext
+    #[allow(unsafe_code)]
     fn SetCssText(&self, value: DOMString) -> ErrorResult {
         let window = window_from_node(self.owner.upcast::<Node>());
         let element = self.owner.upcast::<Element>();
@@ -370,9 +390,10 @@ impl CSSStyleDeclarationMethods for CSSStyleDeclaration {
         *element.style_attribute().borrow_mut() = if decl_block.declarations.is_empty() {
             None // Step 2
         } else {
-            Some(Arc::new(DOMRefCell::new(decl_block)))
+            Some(Arc::new(StyleRefCell::new(decl_block)))
         };
-        element.sync_property_with_attrs_style();
+        let token = unsafe { SingleThreadToken::assert() };
+        element.sync_property_with_attrs_style(&token);
         let node = element.upcast::<Node>();
         node.dirty(NodeDamage::NodeStyleDamaged);
         Ok(())

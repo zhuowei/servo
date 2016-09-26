@@ -276,7 +276,8 @@ fn ensure_node_styled_internal<'a, N, C>(node: N,
 
         element.match_element(&**stylist,
                               None,
-                              &mut applicable_declarations);
+                              &mut applicable_declarations,
+                              context.stylerefcell_token());
     }
 
     unsafe {
@@ -343,7 +344,8 @@ pub fn recalc_style_at<'a, N, C>(context: &'a C,
 
                         relations = element.match_element(&**stylist,
                                                           Some(&*bf),
-                                                          &mut applicable_declarations);
+                                                          &mut applicable_declarations,
+                                                          context.stylerefcell_token());
 
                         debug!("Result of selector matching: {:?}", relations);
 
