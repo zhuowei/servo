@@ -89,3 +89,25 @@ fn make_server<H: Handler + 'static>(handler: H) -> (Listening, ServoUrl) {
     let url = ServoUrl::parse(&url_string).unwrap();
     (server, url)
 }
+/*
+#[derive(Copy, Clone)]
+struct Insecure;
+
+impl ::hyper::net::Ssl for Insecure {
+    type Stream = ::hyper::net::HttpStream;
+    fn wrap_client(&self, stream: ::hyper::net::HttpStream, _host: &str) -> Result<Self::Stream, ::hyper::Error> {
+        Ok(stream)
+    }
+    fn wrap_server(&self, stream: ::hyper::net::HttpStream) -> Result<Self::Stream, ::hyper::Error> {
+        Ok(stream)
+    }
+}
+*/
+fn make_secure_server<H: Handler + 'static>(handler: H) -> (Listening, ServoUrl) {
+    use hyper::net::Openssl;
+    // this is a Listening server because of handle_threads()
+    let server = Server::https("0.0.0.0:0", Openssl::default()).unwrap().handle_threads(handler, 1).unwrap();
+    let url_string = format!("https://localhost:{}", server.socket.port());
+    let url = ServoUrl::parse(&url_string).unwrap();
+    (server, url)
+}

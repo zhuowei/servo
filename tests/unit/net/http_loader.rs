@@ -20,6 +20,7 @@ use hyper::method::Method;
 use hyper::mime::{Mime, SubLevel, TopLevel};
 use hyper::server::{Request as HyperRequest, Response as HyperResponse};
 use hyper::status::StatusCode;
+use make_secure_server;
 use make_server;
 use msg::constellation_msg::{PipelineId, TEST_PIPELINE_ID};
 use net::cookie::Cookie;
@@ -689,35 +690,30 @@ fn test_load_doesnt_add_host_to_sts_list_when_url_is_http_even_if_sts_headers_ar
 
 #[test]
 fn test_load_adds_host_to_sts_list_when_url_is_https_and_sts_headers_are_present() {
-    struct Factory;
+//    ::env_logger::init();
+    let handler = move |_: HyperRequest, mut response: HyperResponse| {
+        response.headers_mut().set(StrictTransportSecurity::excluding_subdomains(31536000));
+        response.send(b"Yay!").unwrap();
+    };
+    let (mut server, url) = make_secure_server(handler);
 
-    impl HttpRequestFactory for Factory {
-        type R = MockRequest;
+    let request = Request::from_init(RequestInit {
+        url: url.clone(),
+        method: Method::Post,
+        body: None,
+        destination: Destination::Document,
+        origin: url.clone(),
+        pipeline_id: Some(TEST_PIPELINE_ID),
+        .. RequestInit::default()
+    });
+    let context = new_fetch_context(None);
+    let response = fetch(Rc::new(request), &mut None, &context);
 
-        fn create(&self, _: ServoUrl, _: Method, _: Headers) -> Result<MockRequest, LoadError> {
-            let content = <[_]>::to_vec("Yay!".as_bytes());
-            let mut headers = Headers::new();
-            headers.set(StrictTransportSecurity::excluding_subdomains(31536000));
-            Ok(MockRequest::new(ResponseType::WithHeaders(content, headers)))
-        }
-    }
+    let _ = server.close();
 
-    let url = ServoUrl::parse("https://mozilla.com").unwrap();
-
-    let load_data = LoadData::new(LoadContext::Browsing, url.clone(), &HttpTest);
-
-    let http_state = HttpState::new();
-    let ui_provider = TestProvider::new();
-
-    let _ = load(&load_data,
-                 &ui_provider, &http_state,
-                 None,
-                 &Factory,
-                 DEFAULT_USER_AGENT.into(),
-                 &CancellationListener::new(None),
-                 None);
-
-    assert!(http_state.hsts_list.read().unwrap().is_host_secure("mozilla.com"));
+    println!("{:#?}", response);
+    assert!(response.to_actual().status.unwrap().is_success());
+    assert_eq!(context.state.hsts_list.read().unwrap().is_host_secure(url.host_str().unwrap()), false);
 }
 
 #[test]
