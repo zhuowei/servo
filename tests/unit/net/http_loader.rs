@@ -690,7 +690,7 @@ fn test_load_doesnt_add_host_to_sts_list_when_url_is_http_even_if_sts_headers_ar
 
 #[test]
 fn test_load_adds_host_to_sts_list_when_url_is_https_and_sts_headers_are_present() {
-//    ::env_logger::init();
+    ::env_logger::init();
     let handler = move |_: HyperRequest, mut response: HyperResponse| {
         response.headers_mut().set(StrictTransportSecurity::excluding_subdomains(31536000));
         response.send(b"Yay!").unwrap();

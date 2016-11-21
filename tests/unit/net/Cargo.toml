@@ -27,3 +27,6 @@ unicase = "1.0"
 url = {version = "1.2", features = ["heap_size"]}
 servo_url = {path = "../../../components/url"}
 util = {path = "../../../components/util"}
+env_logger = "0.3"
+openssl = { version = "0.7.6", features = ["tlsv1_2"] }
+

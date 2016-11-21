@@ -5,6 +5,8 @@
 #![feature(plugin)]
 #![plugin(plugins)]
 
+extern crate env_logger;
+
 extern crate content_blocker;
 extern crate cookie as cookie_rs;
 extern crate devtools_traits;
@@ -21,6 +23,7 @@ extern crate time;
 extern crate unicase;
 extern crate url;
 extern crate util;
+extern crate openssl;
 
 #[cfg(test)] mod chrome_loader;
 #[cfg(test)] mod cookie;
@@ -104,8 +107,31 @@ impl ::hyper::net::Ssl for Insecure {
 }
 */
 fn make_secure_server<H: Handler + 'static>(handler: H) -> (Listening, ServoUrl) {
-    use hyper::net::Openssl;
+ const DEFAULT_CIPHERS: &'static str = concat!(
+    "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:",
+    "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:",
+    "DHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-SHA256:",
+    "ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:",
+    "ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES256-SHA:",
+    "ECDHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:",
+    "DHE-RSA-AES256-SHA256:DHE-RSA-AES256-SHA:ECDHE-RSA-DES-CBC3-SHA:",
+    "ECDHE-ECDSA-DES-CBC3-SHA:AES128-GCM-SHA256:AES256-GCM-SHA384:",
+    "AES128-SHA256:AES256-SHA256:AES128-SHA:AES256-SHA"
+);
+   use hyper::net::Openssl;
+    use openssl::ssl;
     // this is a Listening server because of handle_threads()
+/*
+    let mut ctx = ssl::SslContext::new(ssl::SslMethod::Sslv23).unwrap();
+    ctx.set_cipher_list(DEFAULT_CIPHERS)
+        .unwrap();
+// ctx.set_verify(ssl::SSL_VERIFY_NONE, None);
+//                ctx.set_ecdh_auto(true).unwrap();
+    let ssl = Openssl { context: ::std::sync::Arc::new(ctx) };
+    let mut hyper = Server::https("0.0.0.0:0", ssl).unwrap();
+ hyper.keep_alive(None);
+  let server = hyper.handle_threads(handler, 1).unwrap();
+  */
     let server = Server::https("0.0.0.0:0", Openssl::default()).unwrap().handle_threads(handler, 1).unwrap();
     let url_string = format!("https://localhost:{}", server.socket.port());
     let url = ServoUrl::parse(&url_string).unwrap();

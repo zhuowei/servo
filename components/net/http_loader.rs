@@ -259,6 +259,7 @@ impl HttpRequestFactory for NetworkHttpRequestFactory {
 
     fn create(&self, url: ServoUrl, method: Method, headers: Headers)
               -> Result<WrappedHttpRequest, LoadError> {
+        debug!("Creating http request with url {}", url);
         let connection = Request::with_connector(method,
                                                  url.clone().into_url().unwrap(),
                                                  &*self.connector);
@@ -311,14 +312,19 @@ impl HttpRequest for WrappedHttpRequest {
     type R = WrappedHttpResponse;
 
     fn send(self, body: &Option<Vec<u8>>) -> Result<WrappedHttpResponse, LoadError> {
+        debug!("Sending http request with data {:?}", body);
         let url = ServoUrl::from_url(self.request.url.clone());
         let mut request_writer = match self.request.start() {
             Ok(streaming) => streaming,
-            Err(e) => return Err(LoadError::new(url, LoadErrorType::Connection { reason: e.description().to_owned() })),
+            Err(e) => {
+                debug!("Error start() => {:?}", e);
+                return Err(LoadError::new(url, LoadErrorType::Connection { reason: e.description().to_owned() }))
+            },
         };
 
         if let Some(ref data) = *body {
             if let Err(e) = request_writer.write_all(&data) {
+                debug!("Error write_all() => {:?}", e);
                 return Err(LoadError::new(url, LoadErrorType::Connection { reason: e.description().to_owned() }))
             }
         }
@@ -326,12 +332,17 @@ impl HttpRequest for WrappedHttpRequest {
         let response = match request_writer.send() {
             Ok(w) => w,
             Err(HttpError::Io(ref io_error)) if io_error.kind() == io::ErrorKind::ConnectionAborted => {
+                debug!("Error send() x => {:?}", io_error);
                 let error_type = LoadErrorType::ConnectionAborted { reason: io_error.description().to_owned() };
                 return Err(LoadError::new(url, error_type));
             },
-            Err(e) => return Err(LoadError::new(url, LoadErrorType::Connection { reason: e.description().to_owned() })),
+            Err(e) => {
+                debug!("Error send() y => {:?}", e);
+                return Err(LoadError::new(url, LoadErrorType::Connection { reason: e.description().to_owned() }))
+            },
         };
 
+        debug!("Success! {:?}", response);
         Ok(WrappedHttpResponse { response: response })
     }
 }
@@ -524,6 +535,7 @@ fn set_cookie_for_url(cookie_jar: &Arc<RwLock<CookieStorage>>,
 }
 
 pub fn set_cookies_from_headers(url: &ServoUrl, headers: &Headers, cookie_jar: &Arc<RwLock<CookieStorage>>) {
+    println!("set_cookies_from_headers({}, {:#?})", url, headers);
     if let Some(cookies) = headers.get_raw("set-cookie") {
         for cookie in cookies.iter() {
             if let Ok(cookie_value) = String::from_utf8(cookie.clone()) {
@@ -812,7 +824,7 @@ pub fn obtain_response<A>(request_factory: &HttpRequestFactory<R=A>,
             for header in headers.iter() {
                 info!(" - {}", header);
             }
-            info!("{:?}", data);
+            info!("{:?}", request_body);
         }
 
         let connect_start = precise_time_ms();

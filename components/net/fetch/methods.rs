@@ -1016,7 +1016,7 @@ fn http_network_fetch(request: Rc<Request>,
                 LoadErrorType::ConnectionAborted { .. } => unreachable!(),
                 LoadErrorType::Ssl { reason } => NetworkError::SslValidation(error.url, reason),
                 LoadErrorType::Cancelled => NetworkError::LoadCancelled,
-                e => NetworkError::Internal(e.description().to_owned())
+                e => NetworkError::Internal(format!("{:?}",e))
             };
             return Response::network_error(error);
         }
