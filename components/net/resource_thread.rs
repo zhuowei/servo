@@ -20,7 +20,7 @@ use hyper_serde::Serde;
 use ipc_channel::ipc::{self, IpcReceiver, IpcReceiverSet, IpcSender};
 use mime_classifier::{ApacheBugFlag, MimeClassifier, NoSniffFlag};
 use net_traits::{CookieSource, CoreResourceThread, Metadata, ProgressMsg};
-use net_traits::{CoreResourceMsg, FetchResponseMsg, FetchTaskTarget, LoadConsumer};
+use net_traits::{CoreResourceMsg, FetchResponseMsg, LoadConsumer};
 use net_traits::{CustomResponseMediator, LoadResponse, NetworkError, ResourceId};
 use net_traits::{ResourceThreads, WebSocketCommunicate, WebSocketConnectData};
 use net_traits::LoadContext;
@@ -417,7 +417,7 @@ impl CoreResourceManager {
 
     fn fetch(&self,
              init: RequestInit,
-             sender: IpcSender<FetchResponseMsg>,
+             mut sender: IpcSender<FetchResponseMsg>,
              group: &ResourceGroup) {
         let http_state = HttpState {
             hsts_list: group.hsts_list.clone(),
@@ -434,14 +434,13 @@ impl CoreResourceManager {
             // todo load context / mimesniff in fetch
             // todo referrer policy?
             // todo service worker stuff
-            let mut target = Some(Box::new(sender) as Box<FetchTaskTarget + Send + 'static>);
             let context = FetchContext {
                 state: http_state,
                 user_agent: ua,
                 devtools_chan: dc,
                 filemanager: filemanager,
             };
-            fetch(Rc::new(request), &mut target, &context);
+            fetch(Rc::new(request), &mut sender, &context);
         })
     }
 
