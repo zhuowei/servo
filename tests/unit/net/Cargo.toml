@@ -9,6 +9,9 @@ name = "net_tests"
 path = "lib.rs"
 doctest = false
 
+[features]
+debugmozjs = []
+
 [dependencies]
 content-blocker = "0.2.1"
 cookie = "0.2"
