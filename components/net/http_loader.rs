@@ -33,7 +33,7 @@ use net_traits::{CookieSource, FetchMetadata, NetworkError, ReferrerPolicy};
 use net_traits::hosts::replace_hosts;
 use net_traits::request::{CacheMode, CredentialsMode, Destination, Origin};
 use net_traits::request::{RedirectMode, Referrer, Request, RequestMode, ResponseTainting};
-use net_traits::response::{HttpsState, Response, ResponseBody, ResponseType};
+use net_traits::response::{HttpsState, Response, ResponseType};
 use openssl;
 use openssl::ssl::error::{OpensslError, SslError};
 use resource_thread::AuthCache;
@@ -43,7 +43,6 @@ use std::error::Error;
 use std::fmt;
 use std::io::{self, Read, Write};
 use std::iter::{Iterator, FromIterator};
-use std::mem;
 use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::{Arc, RwLock};
@@ -1109,8 +1108,6 @@ fn http_network_fetch(request: Rc<Request>,
     response.headers = res.response.headers.clone();
     response.referrer = request.referrer.borrow().to_url().cloned();
 
-    let res_body = response.body.clone();
-
     // We're about to spawn a thread to be waited on here
     let (done_sender, done_receiver) = channel();
     *done_chan = Some((done_sender.clone(), done_receiver));
@@ -1124,8 +1121,6 @@ fn http_network_fetch(request: Rc<Request>,
     spawn_named(format!("fetch worker thread"), move || {
         match StreamedResponse::from_http_response(res) {
             Ok(mut res) => {
-                *res_body.lock().unwrap() = ResponseBody::Receiving(vec![]);
-
                 if let Some(ref sender) = devtools_sender {
                     if let Some(m) = msg {
                         send_request_to_devtools(m, &sender);
@@ -1143,25 +1138,13 @@ fn http_network_fetch(request: Rc<Request>,
                 }
 
                 for chunk in Reader(&mut res) {
-                    if let ResponseBody::Receiving(ref mut body) = *res_body.lock().unwrap() {
-                        body.extend_from_slice(&chunk);
-                        let _ = done_sender.send(Data::Payload(chunk));
-                    }
+                    let _ = done_sender.send(Data::Payload(chunk));
                 }
 
-                let mut body = res_body.lock().unwrap();
-                let completed_body = match *body {
-                    ResponseBody::Receiving(ref mut body) => {
-                        mem::replace(body, vec![])
-                    },
-                    _ => vec![],
-                };
-                *body = ResponseBody::Done(completed_body);
                 let _ = done_sender.send(Data::Done);
             }
             Err(_) => {
                 // XXXManishearth we should propagate this error somehow
-                *res_body.lock().unwrap() = ResponseBody::Done(vec![]);
                 let _ = done_sender.send(Data::Done);
             }
         }

@@ -553,8 +553,8 @@ fn test_fetch_redirect_count_failure() {
     assert!(fetch_response.is_network_error());
 
     match *fetch_response.body.lock().unwrap() {
-        ResponseBody::Done(_) | ResponseBody::Receiving(_) => panic!(),
-        _ => { }
+        ResponseBody::Done(ref body) => assert_eq!(body, b""),
+        ref body => panic!("{:?}", body),
     };
 }
 

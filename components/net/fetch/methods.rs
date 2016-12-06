@@ -298,15 +298,19 @@ pub fn main_fetch(request: Rc<Request>,
 
     // Step 22
     if let Some(ref ch) = *done_chan {
+        let mut bytes = vec![];
         loop {
             match ch.1.recv()
                     .expect("fetch worker should always send Done before terminating") {
                 Data::Payload(vec) => {
+                    bytes.extend_from_slice(&vec);
                     target.process_response_chunk(vec);
                 }
                 Data::Done => break,
             }
         }
+        let mut body = response.actual_response().body.lock().unwrap();
+        *body = ResponseBody::Done(bytes);
     } else {
         let body = response.body.lock().unwrap();
         if let ResponseBody::Done(ref vec) = *body {
