@@ -42,7 +42,7 @@ use std::collections::HashSet;
 use std::error::Error;
 use std::fmt;
 use std::io::{self, Read, Write};
-use std::iter::FromIterator;
+use std::iter::{Iterator, FromIterator};
 use std::mem;
 use std::ops::Deref;
 use std::rc::Rc;
@@ -55,16 +55,20 @@ use url::Origin as UrlOrigin;
 use util::thread::spawn_named;
 use uuid;
 
-fn read_block<R: Read>(reader: &mut R) -> Result<Data, ()> {
-    let mut buf = vec![0; 1024];
+struct Reader<'a, R: 'a + Read>(&'a mut R);
 
-    match reader.read(&mut buf) {
-        Ok(len) if len > 0 => {
-            buf.truncate(len);
-            Ok(Data::Payload(buf))
+impl<'a, R: Read> Iterator for Reader<'a, R> {
+    type Item = Vec<u8>;
+
+    fn next(&mut self) -> Option<Vec<u8>> {
+        let mut buf = vec![0; 1024];
+        match self.0.read(&mut buf) {
+            Ok(0) | Err(_) => None,
+            Ok(len) => {
+                buf.truncate(len);
+                Some(buf)
+            }
         }
-        Ok(_) => Ok(Data::Done),
-        Err(_) => Err(()),
     }
 }
 
@@ -1138,28 +1142,22 @@ fn http_network_fetch(request: Rc<Request>,
                     }
                 }
 
-                loop {
-                    match read_block(&mut res) {
-                        Ok(Data::Payload(chunk)) => {
-                            if let ResponseBody::Receiving(ref mut body) = *res_body.lock().unwrap() {
-                                body.extend_from_slice(&chunk);
-                                let _ = done_sender.send(Data::Payload(chunk));
-                            }
-                        },
-                        Ok(Data::Done) | Err(_) => {
-                            let mut body = res_body.lock().unwrap();
-                            let completed_body = match *body {
-                                ResponseBody::Receiving(ref mut body) => {
-                                    mem::replace(body, vec![])
-                                },
-                                _ => vec![],
-                            };
-                            *body = ResponseBody::Done(completed_body);
-                            let _ = done_sender.send(Data::Done);
-                            break;
-                        }
+                for chunk in Reader(&mut res) {
+                    if let ResponseBody::Receiving(ref mut body) = *res_body.lock().unwrap() {
+                        body.extend_from_slice(&chunk);
+                        let _ = done_sender.send(Data::Payload(chunk));
                     }
                 }
+
+                let mut body = res_body.lock().unwrap();
+                let completed_body = match *body {
+                    ResponseBody::Receiving(ref mut body) => {
+                        mem::replace(body, vec![])
+                    },
+                    _ => vec![],
+                };
+                *body = ResponseBody::Done(completed_body);
+                let _ = done_sender.send(Data::Done);
             }
             Err(_) => {
                 // XXXManishearth we should propagate this error somehow
