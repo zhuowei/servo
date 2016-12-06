@@ -7,7 +7,8 @@ use cookie_rs::Cookie as CookiePair;
 use devtools_traits::{ChromeToDevtoolsControlMsg, DevtoolsControlMsg, NetworkEvent};
 use devtools_traits::HttpRequest as DevtoolsHttpRequest;
 use devtools_traits::HttpResponse as DevtoolsHttpResponse;
-use fetch_sync;
+use fetch;
+use fetch_with_context;
 use flate2::Compression;
 use flate2::write::{DeflateEncoder, GzEncoder};
 use hyper::LanguageTag;
@@ -24,7 +25,6 @@ use make_server;
 use msg::constellation_msg::TEST_PIPELINE_ID;
 use net::cookie::Cookie;
 use net::cookie_storage::CookieStorage;
-use net::fetch::methods::fetch;
 use net::resource_thread::AuthCacheEntry;
 use net_traits::{CookieSource, NetworkError};
 use net_traits::hosts::replace_host_table;
@@ -34,7 +34,6 @@ use new_fetch_context;
 use servo_url::ServoUrl;
 use std::collections::HashMap;
 use std::io::{Read, Write};
-use std::rc::Rc;
 use std::sync::{Arc, Mutex, RwLock, mpsc};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Receiver;
@@ -143,7 +142,7 @@ fn test_check_default_headers_loaded_in_every_request() {
         pipeline_id: Some(TEST_PIPELINE_ID),
         .. RequestInit::default()
     });
-    let response = fetch_sync(request, None);
+    let response = fetch(request, None);
     assert!(response.status.unwrap().is_success());
 
     // Testing for method.POST
@@ -157,7 +156,7 @@ fn test_check_default_headers_loaded_in_every_request() {
         pipeline_id: Some(TEST_PIPELINE_ID),
         .. RequestInit::default()
     });
-    let response = fetch_sync(request, None);
+    let response = fetch(request, None);
     assert!(response.status.unwrap().is_success());
 
     let _ = server.close();
@@ -179,7 +178,7 @@ fn test_load_when_request_is_not_get_or_head_and_there_is_no_body_content_length
         pipeline_id: Some(TEST_PIPELINE_ID),
         .. RequestInit::default()
     });
-    let response = fetch_sync(request, None);
+    let response = fetch(request, None);
     assert!(response.status.unwrap().is_success());
 
     let _ = server.close();
@@ -206,7 +205,7 @@ fn test_request_and_response_data_with_network_messages() {
         .. RequestInit::default()
     });
     let (devtools_chan, devtools_port) = mpsc::channel();
-    let response = fetch_sync(request, Some(devtools_chan));
+    let response = fetch(request, Some(devtools_chan));
     assert!(response.status.unwrap().is_success());
 
     let _ = server.close();
@@ -293,7 +292,7 @@ fn test_request_and_response_message_from_devtool_without_pipeline_id() {
         .. RequestInit::default()
     });
     let (devtools_chan, devtools_port) = mpsc::channel();
-    let response = fetch_sync(request, Some(devtools_chan));
+    let response = fetch(request, Some(devtools_chan));
     assert!(response.status.unwrap().is_success());
 
     let _ = server.close();
@@ -328,7 +327,7 @@ fn test_redirected_request_to_devtools() {
         .. RequestInit::default()
     });
     let (devtools_chan, devtools_port) = mpsc::channel();
-    let response = fetch_sync(request, Some(devtools_chan));
+    let response = fetch(request, Some(devtools_chan));
 
     let _ = pre_server.close();
     let _ = post_server.close();
@@ -375,7 +374,7 @@ fn test_load_when_redirecting_from_a_post_should_rewrite_next_request_as_get() {
         pipeline_id: Some(TEST_PIPELINE_ID),
         .. RequestInit::default()
     });
-    let response = fetch_sync(request, None);
+    let response = fetch(request, None);
 
     let _ = pre_server.close();
     let _ = post_server.close();
@@ -403,7 +402,7 @@ fn test_load_should_decode_the_response_as_deflate_when_response_headers_have_co
         pipeline_id: Some(TEST_PIPELINE_ID),
         .. RequestInit::default()
     });
-    let response = fetch_sync(request, None);
+    let response = fetch(request, None);
 
     let _ = server.close();
 
@@ -433,7 +432,7 @@ fn test_load_should_decode_the_response_as_gzip_when_response_headers_have_conte
         pipeline_id: Some(TEST_PIPELINE_ID),
         .. RequestInit::default()
     });
-    let response = fetch_sync(request, None);
+    let response = fetch(request, None);
 
     let _ = server.close();
 
@@ -472,7 +471,7 @@ fn test_load_doesnt_send_request_body_on_any_redirect() {
         pipeline_id: Some(TEST_PIPELINE_ID),
         .. RequestInit::default()
     });
-    let response = fetch_sync(request, None);
+    let response = fetch(request, None);
 
     let _ = pre_server.close();
     let _ = post_server.close();
@@ -498,7 +497,7 @@ fn test_load_doesnt_add_host_to_sts_list_when_url_is_http_even_if_sts_headers_ar
         .. RequestInit::default()
     });
     let context = new_fetch_context(None);
-    let response = fetch(Rc::new(request), &mut None, &context);
+    let response = fetch_with_context(request, &context);
 
     let _ = server.close();
 
@@ -528,7 +527,7 @@ fn test_load_sets_cookies_in_the_resource_manager_when_it_get_set_cookie_header_
         credentials_mode: CredentialsMode::Include,
         .. RequestInit::default()
     });
-    let response = fetch(Rc::new(request), &mut None, &context);
+    let response = fetch_with_context(request, &context);
 
     let _ = server.close();
 
@@ -568,7 +567,7 @@ fn test_load_sets_requests_cookies_header_for_url_by_getting_cookies_from_the_re
         credentials_mode: CredentialsMode::Include,
         .. RequestInit::default()
     });
-    let response = fetch(Rc::new(request), &mut None, &context);
+    let response = fetch_with_context(request, &context);
 
     let _ = server.close();
 
@@ -606,7 +605,7 @@ fn test_load_sends_cookie_if_nonhttp() {
         credentials_mode: CredentialsMode::Include,
         .. RequestInit::default()
     });
-    let response = fetch(Rc::new(request), &mut None, &context);
+    let response = fetch_with_context(request, &context);
 
     let _ = server.close();
 
@@ -637,7 +636,7 @@ fn test_cookie_set_with_httponly_should_not_be_available_using_getcookiesforurl(
         credentials_mode: CredentialsMode::Include,
         .. RequestInit::default()
     });
-    let response = fetch(Rc::new(request), &mut None, &context);
+    let response = fetch_with_context(request, &context);
 
     let _ = server.close();
 
@@ -672,7 +671,7 @@ fn test_when_cookie_received_marked_secure_is_ignored_for_http() {
         credentials_mode: CredentialsMode::Include,
         .. RequestInit::default()
     });
-    let response = fetch(Rc::new(request), &mut None, &context);
+    let response = fetch_with_context(request, &context);
 
     let _ = server.close();
 
@@ -700,7 +699,7 @@ fn test_load_sets_content_length_to_length_of_request_body() {
         pipeline_id: Some(TEST_PIPELINE_ID),
         .. RequestInit::default()
     });
-    let response = fetch_sync(request, None);
+    let response = fetch(request, None);
 
     let _ = server.close();
 
@@ -728,7 +727,7 @@ fn test_load_uses_explicit_accept_from_headers_in_load_data() {
         pipeline_id: Some(TEST_PIPELINE_ID),
         .. RequestInit::default()
     });
-    let response = fetch_sync(request, None);
+    let response = fetch(request, None);
 
     let _ = server.close();
 
@@ -755,7 +754,7 @@ fn test_load_sets_default_accept_to_html_xhtml_xml_and_then_anything_else() {
         pipeline_id: Some(TEST_PIPELINE_ID),
         .. RequestInit::default()
     });
-    let response = fetch_sync(request, None);
+    let response = fetch(request, None);
 
     let _ = server.close();
 
@@ -783,7 +782,7 @@ fn test_load_uses_explicit_accept_encoding_from_load_data_headers() {
         pipeline_id: Some(TEST_PIPELINE_ID),
         .. RequestInit::default()
     });
-    let response = fetch_sync(request, None);
+    let response = fetch(request, None);
 
     let _ = server.close();
 
@@ -810,7 +809,7 @@ fn test_load_sets_default_accept_encoding_to_gzip_and_deflate() {
         pipeline_id: Some(TEST_PIPELINE_ID),
         .. RequestInit::default()
     });
-    let response = fetch_sync(request, None);
+    let response = fetch(request, None);
 
     let _ = server.close();
 
@@ -847,7 +846,7 @@ fn test_load_errors_when_there_a_redirect_loop() {
         pipeline_id: Some(TEST_PIPELINE_ID),
         .. RequestInit::default()
     });
-    let response = fetch_sync(request, None);
+    let response = fetch(request, None);
 
     let _ = server_a.close();
     let _ = server_b.close();
@@ -890,7 +889,7 @@ fn test_load_succeeds_with_a_redirect_loop() {
         pipeline_id: Some(TEST_PIPELINE_ID),
         .. RequestInit::default()
     });
-    let response = fetch_sync(request, None);
+    let response = fetch(request, None);
 
     let _ = server_a.close();
     let _ = server_b.close();
@@ -927,7 +926,7 @@ fn test_load_follows_a_redirect() {
         pipeline_id: Some(TEST_PIPELINE_ID),
         .. RequestInit::default()
     });
-    let response = fetch_sync(request, None);
+    let response = fetch(request, None);
 
     let _ = pre_server.close();
     let _ = post_server.close();
@@ -1005,7 +1004,7 @@ fn  test_redirect_from_x_to_y_provides_y_cookies_from_y() {
         credentials_mode: CredentialsMode::Include,
         .. RequestInit::default()
     });
-    let response = fetch(Rc::new(request), &mut None, &context);
+    let response = fetch_with_context(request, &context);
 
     let _ = server.close();
 
@@ -1049,7 +1048,7 @@ fn test_redirect_from_x_to_x_provides_x_with_cookie_from_first_response() {
         credentials_mode: CredentialsMode::Include,
         .. RequestInit::default()
     });
-    let response = fetch_sync(request, None);
+    let response = fetch(request, None);
 
     let _ = server.close();
 
@@ -1090,7 +1089,7 @@ fn test_if_auth_creds_not_in_url_but_in_cache_it_sets_it() {
 
     context.state.auth_cache.write().unwrap().entries.insert(url.origin().clone().ascii_serialization(), auth_entry);
 
-    let response = fetch(Rc::new(request), &mut None, &context);
+    let response = fetch_with_context(request, &context);
 
     let _ = server.close();
 
@@ -1116,7 +1115,7 @@ fn test_auth_ui_needs_www_auth() {
         .. RequestInit::default()
     });
 
-    let response = fetch_sync(request, None);
+    let response = fetch(request, None);
 
     let _ = server.close();
 
@@ -1148,7 +1147,7 @@ fn test_content_blocked() {
         .. RequestInit::default()
     });
 
-    let response = fetch(Rc::new(request), &mut None, &context);
+    let response = fetch_with_context(request, &context);
 
     let _ = server.close();
 
@@ -1191,7 +1190,7 @@ fn test_cookies_blocked() {
         .. RequestInit::default()
     });
 
-    let response = fetch(Rc::new(request), &mut None, &context);
+    let response = fetch_with_context(request, &context);
 
     let _ = server.close();
 
