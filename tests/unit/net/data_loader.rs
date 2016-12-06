@@ -38,7 +38,7 @@ fn assert_parse(url:          &'static str,
             assert_eq!(metadata.content_type.map(Serde::into_inner), content_type);
             assert_eq!(metadata.charset.as_ref().map(String::deref), charset);
 
-            let resp_body = response.body.lock().unwrap();
+            let resp_body = response.body.borrow_mut();
             match *resp_body {
                 ResponseBody::Done(ref val) => {
                     assert_eq!(val, &data);

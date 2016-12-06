@@ -11,7 +11,6 @@ use hyper_serde::Serde;
 use servo_url::ServoUrl;
 use std::ascii::AsciiExt;
 use std::cell::{Cell, RefCell};
-use std::sync::{Arc, Mutex};
 
 /// [Response type](https://fetch.spec.whatwg.org/#concept-response-type)
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize, HeapSizeOf)]
@@ -75,7 +74,7 @@ pub enum ResponseMsg {
 }
 
 /// A [Response](https://fetch.spec.whatwg.org/#concept-response) as defined by the Fetch spec
-#[derive(Debug, HeapSizeOf)]
+#[derive(Debug, Clone, HeapSizeOf)]
 pub struct Response {
     pub response_type: ResponseType,
     pub termination_reason: Option<TerminationReason>,
@@ -87,8 +86,7 @@ pub struct Response {
     pub raw_status: Option<(u16, Vec<u8>)>,
     #[ignore_heap_size_of = "Defined in hyper"]
     pub headers: Headers,
-    #[ignore_heap_size_of = "Mutex heap size undefined"]
-    pub body: Arc<Mutex<ResponseBody>>,
+    pub body: RefCell<ResponseBody>,
     pub cache_state: CacheState,
     pub https_state: HttpsState,
     pub referrer: Option<ServoUrl>,
@@ -109,7 +107,7 @@ impl Response {
             status: Some(StatusCode::Ok),
             raw_status: Some((200, b"OK".to_vec())),
             headers: Headers::new(),
-            body: Arc::new(Mutex::new(ResponseBody::Empty)),
+            body: RefCell::new(ResponseBody::Empty),
             cache_state: CacheState::None,
             https_state: HttpsState::None,
             referrer: None,
@@ -127,7 +125,7 @@ impl Response {
             status: None,
             raw_status: None,
             headers: Headers::new(),
-            body: Arc::new(Mutex::new(ResponseBody::Empty)),
+            body: RefCell::new(ResponseBody::Empty),
             cache_state: CacheState::None,
             https_state: HttpsState::None,
             referrer: None,
@@ -226,14 +224,14 @@ impl Response {
                 response.url = None;
                 response.headers = Headers::new();
                 response.status = None;
-                response.body = Arc::new(Mutex::new(ResponseBody::Empty));
+                response.body = RefCell::new(ResponseBody::Empty);
                 response.cache_state = CacheState::None;
             },
 
             ResponseType::OpaqueRedirect => {
                 response.headers = Headers::new();
                 response.status = None;
-                response.body = Arc::new(Mutex::new(ResponseBody::Empty));
+                response.body = RefCell::new(ResponseBody::Empty);
                 response.cache_state = CacheState::None;
             }
         }
@@ -278,26 +276,6 @@ impl Response {
             }
         } else {
             Ok(FetchMetadata::Unfiltered(metadata.unwrap()))
-        }
-    }
-}
-
-impl Clone for Response {
-    fn clone(&self) -> Response {
-        Response {
-            response_type: self.response_type.clone(),
-            termination_reason: self.termination_reason,
-            url: self.url.clone(),
-            url_list: self.url_list.clone(),
-            status: self.status,
-            raw_status: self.raw_status.clone(),
-            headers: self.headers.clone(),
-            body: Arc::new(Mutex::new((*self.body.lock().unwrap()).clone())),
-            cache_state: self.cache_state,
-            https_state: self.https_state,
-            referrer: self.referrer.clone(),
-            internal_response: self.internal_response.clone(),
-            return_internal: self.return_internal.clone(),
         }
     }
 }
