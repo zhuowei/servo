@@ -281,41 +281,8 @@ pub fn main_fetch(request: Rc<Request>,
         // }
     }
 
-    // Step 19
-    if request.synchronous {
-        // process_response is not supposed to be used
-        // by sync fetch, but we overload it here for simplicity
-        target.process_response(&response);
-
-        if let Some(ref ch) = *done_chan {
-            loop {
-                match ch.1.recv()
-                        .expect("fetch worker should always send Done before terminating") {
-                    Data::Payload(vec) => {
-                        target.process_response_chunk(vec);
-                    }
-                    Data::Done => break,
-                }
-            }
-        } else {
-            let body = response.body.lock().unwrap();
-            if let ResponseBody::Done(ref vec) = *body {
-                // in case there was no channel to wait for, the body was
-                // obtained synchronously via basic_fetch for data/file/about/etc
-                // We should still send the body across as a chunk
-                target.process_response_chunk(vec.clone());
-            } else {
-                assert!(*body == ResponseBody::Empty)
-            }
-        }
-
-        // overloaded similarly to process_response
-        target.process_response_eof(&response);
-        return response;
-    }
-
     // Step 20
-    if request.body.borrow().is_some() && matches!(request.current_url().scheme(), "http" | "https") {
+    if !request.synchronous && request.body.borrow().is_some() && matches!(request.current_url().scheme(), "http" | "https") {
         // XXXManishearth: We actually should be calling process_request
         // in http_network_fetch. However, we can't yet follow the request
         // upload progress, so I'm keeping it here for now and pretending
@@ -325,6 +292,8 @@ pub fn main_fetch(request: Rc<Request>,
     }
 
     // Step 21
+    // process_response is not supposed to be used
+    // by sync fetch, but we overload it here for simplicity
     target.process_response(&response);
 
     // Step 22
@@ -350,10 +319,13 @@ pub fn main_fetch(request: Rc<Request>,
         }
     }
 
-    // Step 23
-    request.done.set(true);
+    if !request.synchronous {
+        // Step 23
+        request.done.set(true);
+    }
 
     // Step 24
+    // overloaded similarly to process_response
     target.process_response_eof(&response);
 
     // TODO remove this line when only asynchronous fetches are used
