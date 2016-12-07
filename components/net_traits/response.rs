@@ -36,7 +36,6 @@ pub enum TerminationReason {
 #[derive(Clone, Debug, PartialEq, HeapSizeOf)]
 pub enum ResponseBody {
     Empty, // XXXManishearth is this necessary, or is Done(vec![]) enough?
-    Receiving(Vec<u8>),
     Done(Vec<u8>),
 }
 
@@ -44,7 +43,7 @@ impl ResponseBody {
     pub fn is_done(&self) -> bool {
         match *self {
             ResponseBody::Done(..) => true,
-            ResponseBody::Empty | ResponseBody::Receiving(..) => false
+            ResponseBody::Empty => false
         }
     }
 }
