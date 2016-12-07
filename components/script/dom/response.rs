@@ -21,7 +21,6 @@ use dom::xmlhttprequest::Extractable;
 use hyper::header::Headers as HyperHeaders;
 use hyper::status::StatusCode;
 use hyper_serde::Serde;
-use net_traits::response::{ResponseBody as NetTraitsResponseBody};
 use servo_url::ServoUrl;
 use std::cell::Ref;
 use std::mem;
@@ -42,8 +41,7 @@ pub struct Response {
     response_type: DOMRefCell<DOMResponseType>,
     url: DOMRefCell<Option<ServoUrl>>,
     url_list: DOMRefCell<Vec<ServoUrl>>,
-    // For now use the existing NetTraitsResponseBody enum
-    body: DOMRefCell<NetTraitsResponseBody>,
+    body: DOMRefCell<Vec<u8>>,
     #[ignore_heap_size_of = "Rc"]
     body_promise: DOMRefCell<Option<(Rc<Promise>, BodyType)>>,
 }
@@ -60,7 +58,7 @@ impl Response {
             response_type: DOMRefCell::new(DOMResponseType::Default),
             url: DOMRefCell::new(None),
             url_list: DOMRefCell::new(vec![]),
-            body: DOMRefCell::new(NetTraitsResponseBody::Empty),
+            body: DOMRefCell::new(vec![]),
             body_promise: DOMRefCell::new(None),
         }
     }
@@ -113,7 +111,7 @@ impl Response {
 
             // Step 7.3
             let (extracted_body, content_type) = body.extract();
-            *r.body.borrow_mut() = NetTraitsResponseBody::Done(extracted_body);
+            *r.body.borrow_mut() = extracted_body;
 
             // Step 7.4
             if let Some(content_type_contents) = content_type {
@@ -208,16 +206,7 @@ impl BodyOperations for Response {
     }
 
     fn take_body(&self) -> Option<Vec<u8>> {
-        let body = mem::replace(&mut *self.body.borrow_mut(), NetTraitsResponseBody::Empty);
-        match body {
-            NetTraitsResponseBody::Done(bytes) => {
-                Some(bytes)
-            },
-            body => {
-                mem::replace(&mut *self.body.borrow_mut(), body);
-                None
-            },
-        }
+        Some(mem::replace(&mut *self.body.borrow_mut(), vec![]))
     }
 
     fn get_mime_type(&self) -> Ref<Vec<u8>> {
@@ -315,10 +304,7 @@ impl ResponseMethods for Response {
         *new_response.raw_status.borrow_mut() = self.raw_status.borrow().clone();
         *new_response.url.borrow_mut() = self.url.borrow().clone();
         *new_response.url_list.borrow_mut() = self.url_list.borrow().clone();
-
-        if *self.body.borrow() != NetTraitsResponseBody::Empty {
-            *new_response.body.borrow_mut() = self.body.borrow().clone();
-        }
+        *new_response.body.borrow_mut() = self.body.borrow().clone();
 
         // Step 3
         // TODO: This step relies on promises, which are still unimplemented.
@@ -383,7 +369,7 @@ impl Response {
 
     #[allow(unrooted_must_root)]
     pub fn finish(&self, body: Vec<u8>) {
-        *self.body.borrow_mut() = NetTraitsResponseBody::Done(body);
+        *self.body.borrow_mut() = body;
         if let Some((p, body_type)) = self.body_promise.borrow_mut().take() {
             consume_body_with_promise(self, body_type, &p);
         }

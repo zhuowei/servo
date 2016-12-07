@@ -17,7 +17,7 @@ use mime_guess::guess_mime_type;
 use net_traits::{FetchTaskTarget, NetworkError, ReferrerPolicy};
 use net_traits::request::{RedirectMode, Referrer, Request, RequestMode, ResponseTainting};
 use net_traits::request::{Type, Origin, Window};
-use net_traits::response::{Response, ResponseBody, ResponseType};
+use net_traits::response::{Response, ResponseType};
 use std::borrow::Cow;
 use std::fs::File;
 use std::io::Read;
@@ -263,7 +263,7 @@ pub fn main_fetch(request: Rc<Request>,
             // when Fetch is used only asynchronously, we will need to make sure
             // that nothing tries to write to the body at this point
             let mut body = internal_response.body.borrow_mut();
-            *body = ResponseBody::Empty;
+            *body = vec![];
         }
 
         // Step 18
@@ -310,17 +310,13 @@ pub fn main_fetch(request: Rc<Request>,
             }
         }
         let mut body = response.actual_response().body.borrow_mut();
-        *body = ResponseBody::Done(bytes);
+        *body = bytes;
     } else {
         let body = response.body.borrow_mut();
-        if let ResponseBody::Done(ref vec) = *body {
-            // in case there was no channel to wait for, the body was
-            // obtained synchronously via basic_fetch for data/file/about/etc
-            // We should still send the body across as a chunk
-            target.process_response_chunk(vec.clone());
-        } else {
-            assert!(*body == ResponseBody::Empty)
-        }
+        // in case there was no channel to wait for, the body was
+        // obtained synchronously via basic_fetch for data/file/about/etc
+        // We should still send the body across as a chunk
+        target.process_response_chunk(body.clone());
     }
 
     if !request.synchronous {
@@ -349,7 +345,7 @@ fn basic_fetch(request: Rc<Request>,
         "about" if url.path() == "blank" => {
             let mut response = Response::new(url);
             response.headers.set(ContentType(mime!(Text / Html; Charset = Utf8)));
-            *response.body.borrow_mut() = ResponseBody::Done(vec![]);
+            *response.body.borrow_mut() = vec![];
             response
         },
 
@@ -362,7 +358,7 @@ fn basic_fetch(request: Rc<Request>,
                 match decode(&url) {
                     Ok((mime, bytes)) => {
                         let mut response = Response::new(url);
-                        *response.body.borrow_mut() = ResponseBody::Done(bytes);
+                        *response.body.borrow_mut() = bytes;
                         response.headers.set(ContentType(mime));
                         response
                     },
@@ -384,7 +380,7 @@ fn basic_fetch(request: Rc<Request>,
                                 let mime = guess_mime_type(file_path);
 
                                 let mut response = Response::new(url);
-                                *response.body.borrow_mut() = ResponseBody::Done(bytes);
+                                *response.body.borrow_mut() = bytes;
                                 response.headers.set(ContentType(mime));
                                 response
                             },
@@ -409,7 +405,7 @@ fn basic_fetch(request: Rc<Request>,
                 Ok((headers, bytes)) => {
                     let mut response = Response::new(url);
                     response.headers = headers;
-                    *response.body.borrow_mut() = ResponseBody::Done(bytes);
+                    *response.body.borrow_mut() = bytes;
                     response
                 },
                 Err(e) => {

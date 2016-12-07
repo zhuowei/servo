@@ -29,7 +29,6 @@ use net::resource_thread::AuthCacheEntry;
 use net_traits::{CookieSource, NetworkError};
 use net_traits::hosts::replace_host_table;
 use net_traits::request::{Request, RequestInit, CredentialsMode, Destination};
-use net_traits::response::ResponseBody;
 use new_fetch_context;
 use servo_url::ServoUrl;
 use std::collections::HashMap;
@@ -408,8 +407,7 @@ fn test_load_should_decode_the_response_as_deflate_when_response_headers_have_co
 
     let response = response.to_actual();
     assert!(response.status.unwrap().is_success());
-    assert_eq!(*response.body.borrow_mut(),
-               ResponseBody::Done(b"Yay!".to_vec()));
+    assert_eq!(*response.body.borrow_mut(), b"Yay!");
 }
 
 #[test]
@@ -438,8 +436,7 @@ fn test_load_should_decode_the_response_as_gzip_when_response_headers_have_conte
 
     let response = response.to_actual();
     assert!(response.status.unwrap().is_success());
-    assert_eq!(*response.body.borrow_mut(),
-               ResponseBody::Done(b"Yay!".to_vec()));
+    assert_eq!(*response.body.borrow_mut(), b"Yay!");
 }
 
 #[test]
@@ -897,8 +894,7 @@ fn test_load_succeeds_with_a_redirect_loop() {
     let response = response.to_actual();
     assert_eq!(*response.url_list.borrow(),
                [url_a.clone(), url_b, url_a]);
-    assert_eq!(*response.body.borrow_mut(),
-               ResponseBody::Done(b"Success".to_vec()));
+    assert_eq!(*response.body.borrow_mut(), b"Success");
 }
 
 #[test]
@@ -933,8 +929,7 @@ fn test_load_follows_a_redirect() {
 
     let response = response.to_actual();
     assert!(response.status.unwrap().is_success());
-    assert_eq!(*response.body.borrow_mut(),
-               ResponseBody::Done(b"Yay!".to_vec()));
+    assert_eq!(*response.body.borrow_mut(), b"Yay!");
 }
 
 #[test]
@@ -1010,8 +1005,7 @@ fn  test_redirect_from_x_to_y_provides_y_cookies_from_y() {
 
     let response = response.to_actual();
     assert!(response.status.unwrap().is_success());
-    assert_eq!(*response.body.borrow_mut(),
-               ResponseBody::Done(b"Yay!".to_vec()));
+    assert_eq!(*response.body.borrow_mut(), b"Yay!");
 }
 
 #[test]
@@ -1054,8 +1048,7 @@ fn test_redirect_from_x_to_x_provides_x_with_cookie_from_first_response() {
 
     let response = response.to_actual();
     assert!(response.status.unwrap().is_success());
-    assert_eq!(*response.body.borrow_mut(),
-               ResponseBody::Done(b"Yay!".to_vec()));
+    assert_eq!(*response.body.borrow_mut(), b"Yay!");
 }
 
 #[test]

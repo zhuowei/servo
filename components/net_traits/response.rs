@@ -39,16 +39,6 @@ pub enum ResponseBody {
     Done(Vec<u8>),
 }
 
-impl ResponseBody {
-    pub fn is_done(&self) -> bool {
-        match *self {
-            ResponseBody::Done(..) => true,
-            ResponseBody::Empty => false
-        }
-    }
-}
-
-
 /// [Cache state](https://fetch.spec.whatwg.org/#concept-response-cache-state)
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, HeapSizeOf)]
 pub enum CacheState {
@@ -85,7 +75,7 @@ pub struct Response {
     pub raw_status: Option<(u16, Vec<u8>)>,
     #[ignore_heap_size_of = "Defined in hyper"]
     pub headers: Headers,
-    pub body: RefCell<ResponseBody>,
+    pub body: RefCell<Vec<u8>>,
     pub cache_state: CacheState,
     pub https_state: HttpsState,
     pub referrer: Option<ServoUrl>,
@@ -106,7 +96,7 @@ impl Response {
             status: Some(StatusCode::Ok),
             raw_status: Some((200, b"OK".to_vec())),
             headers: Headers::new(),
-            body: RefCell::new(ResponseBody::Empty),
+            body: RefCell::new(vec![]),
             cache_state: CacheState::None,
             https_state: HttpsState::None,
             referrer: None,
@@ -124,7 +114,7 @@ impl Response {
             status: None,
             raw_status: None,
             headers: Headers::new(),
-            body: RefCell::new(ResponseBody::Empty),
+            body: RefCell::new(vec![]),
             cache_state: CacheState::None,
             https_state: HttpsState::None,
             referrer: None,
@@ -223,14 +213,14 @@ impl Response {
                 response.url = None;
                 response.headers = Headers::new();
                 response.status = None;
-                response.body = RefCell::new(ResponseBody::Empty);
+                response.body = RefCell::new(vec![]);
                 response.cache_state = CacheState::None;
             },
 
             ResponseType::OpaqueRedirect => {
                 response.headers = Headers::new();
                 response.status = None;
-                response.body = RefCell::new(ResponseBody::Empty);
+                response.body = RefCell::new(vec![]);
                 response.cache_state = CacheState::None;
             }
         }

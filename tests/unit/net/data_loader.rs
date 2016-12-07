@@ -8,7 +8,6 @@ use hyper::mime::{Attr, Mime, SubLevel, TopLevel, Value};
 use hyper_serde::Serde;
 use net_traits::{FetchMetadata, FilteredMetadata, NetworkError};
 use net_traits::request::{Origin, Request};
-use net_traits::response::ResponseBody;
 use servo_url::ServoUrl;
 use std::ops::Deref;
 
@@ -39,12 +38,7 @@ fn assert_parse(url:          &'static str,
             assert_eq!(metadata.charset.as_ref().map(String::deref), charset);
 
             let resp_body = response.body.borrow_mut();
-            match *resp_body {
-                ResponseBody::Done(ref val) => {
-                    assert_eq!(val, &data);
-                },
-                _ => panic!(),
-            }
+            assert_eq!(*resp_body, data);
         },
         None => {
             assert!(response.is_network_error());

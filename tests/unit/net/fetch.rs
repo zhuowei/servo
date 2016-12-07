@@ -25,7 +25,7 @@ use msg::constellation_msg::TEST_PIPELINE_ID;
 use net::fetch::cors_cache::CorsCache;
 use net_traits::ReferrerPolicy;
 use net_traits::request::{Origin, RedirectMode, Referrer, Request, RequestMode};
-use net_traits::response::{CacheState, Response, ResponseBody, ResponseType};
+use net_traits::response::{CacheState, Response, ResponseType};
 use servo_url::ServoUrl;
 use std::fs::File;
 use std::io::Read;
@@ -76,12 +76,7 @@ fn test_fetch_response_body_matches_const_message() {
     assert!(!fetch_response.is_network_error());
     assert_eq!(fetch_response.response_type, ResponseType::Basic);
 
-    match *fetch_response.actual_response().body.borrow_mut() {
-        ResponseBody::Done(ref body) => {
-            assert_eq!(&**body, MESSAGE);
-        },
-        _ => panic!()
-    };
+    assert_eq!(*fetch_response.actual_response().body.borrow_mut(), MESSAGE);
 }
 
 #[test]
@@ -92,7 +87,7 @@ fn test_fetch_aboutblank() {
     *request.referrer.borrow_mut() = Referrer::NoReferrer;
     let fetch_response = fetch(request, None);
     assert!(!fetch_response.is_network_error());
-    assert!(*fetch_response.body.borrow_mut() == ResponseBody::Done(vec![]));
+    assert_eq!(*fetch_response.body.borrow_mut(), b"");
 }
 
 #[test]
@@ -131,8 +126,7 @@ fn test_fetch_blob() {
     let content_length: &ContentLength = fetch_response.headers.get().unwrap();
     assert_eq!(**content_length, bytes.len() as u64);
 
-    assert_eq!(*fetch_response.body.borrow_mut(),
-               ResponseBody::Done(bytes.to_vec()));
+    assert_eq!(*fetch_response.body.borrow_mut(), bytes);
 }
 
 #[test]
@@ -150,17 +144,11 @@ fn test_fetch_file() {
     let content_type: &ContentType = fetch_response.headers.get().unwrap();
     assert!(**content_type == Mime(TopLevel::Text, SubLevel::Css, vec![]));
 
-    let resp_body = fetch_response.body.borrow_mut();
     let mut file = File::open(path).unwrap();
     let mut bytes = vec![];
     let _ = file.read_to_end(&mut bytes);
 
-    match *resp_body {
-        ResponseBody::Done(ref val) => {
-            assert_eq!(val, &bytes);
-        },
-        _ => panic!()
-    }
+    assert_eq!(*fetch_response.body.borrow_mut(), bytes);
 }
 
 #[test]
@@ -216,10 +204,7 @@ fn test_cors_preflight_fetch() {
     let fetch_response = fetch_response.to_actual();
     assert!(!fetch_response.is_network_error());
 
-    match *fetch_response.body.borrow_mut() {
-        ResponseBody::Done(ref body) => assert_eq!(&**body, ACK),
-        _ => panic!()
-    };
+    assert_eq!(*fetch_response.body.borrow_mut(), ACK);
 }
 
 #[test]
@@ -264,14 +249,8 @@ fn test_cors_preflight_cache_fetch() {
     assert_eq!(true, cache.match_method(&*wrapped_request0, Method::Get));
     assert_eq!(true, cache.match_method(&*wrapped_request1, Method::Get));
 
-    match *fetch_response0.actual_response().body.borrow_mut() {
-        ResponseBody::Done(ref body) => assert_eq!(&**body, ACK),
-        _ => panic!()
-    };
-    match *fetch_response1.actual_response().body.borrow_mut() {
-        ResponseBody::Done(ref body) => assert_eq!(&**body, ACK),
-        _ => panic!()
-    };
+    assert_eq!(*fetch_response0.actual_response().body.borrow_mut(), ACK);
+    assert_eq!(*fetch_response1.actual_response().body.borrow_mut(), ACK);
 }
 
 #[test]
@@ -407,10 +386,7 @@ fn test_fetch_response_is_opaque_filtered() {
     // this also asserts that status message is "the empty byte sequence"
     assert!(fetch_response.status.is_none());
     assert_eq!(fetch_response.headers, Headers::new());
-    match *fetch_response.body.borrow_mut() {
-        ResponseBody::Empty => { },
-        _ => panic!()
-    }
+    assert_eq!(*fetch_response.body.borrow_mut(), b"");
     match fetch_response.cache_state {
         CacheState::None => { },
         _ => panic!()
@@ -453,10 +429,7 @@ fn test_fetch_response_is_opaque_redirect_filtered() {
     // this also asserts that status message is "the empty byte sequence"
     assert!(fetch_response.status.is_none());
     assert_eq!(fetch_response.headers, Headers::new());
-    match *fetch_response.body.borrow_mut() {
-        ResponseBody::Empty => { },
-        _ => panic!()
-    }
+    assert_eq!(*fetch_response.body.borrow_mut(), b"");
     match fetch_response.cache_state {
         CacheState::None => { },
         _ => panic!()
@@ -534,12 +507,7 @@ fn test_fetch_redirect_count_ceiling() {
     assert!(!fetch_response.is_network_error());
     assert_eq!(fetch_response.response_type, ResponseType::Basic);
 
-    match *fetch_response.actual_response().body.borrow_mut() {
-        ResponseBody::Done(ref body) => {
-            assert_eq!(&**body, MESSAGE);
-        },
-        _ => panic!()
-    };
+    assert_eq!(*fetch_response.actual_response().body.borrow_mut(), MESSAGE);
 }
 
 #[test]
@@ -552,10 +520,7 @@ fn test_fetch_redirect_count_failure() {
 
     assert!(fetch_response.is_network_error());
 
-    match *fetch_response.body.borrow_mut() {
-        ResponseBody::Done(ref body) => assert_eq!(body, b""),
-        ref body => panic!("{:?}", body),
-    };
+    assert_eq!(*fetch_response.body.borrow_mut(), b"");
 }
 
 fn test_fetch_redirect_updates_method_runner(tx: Sender<bool>, status_code: StatusCode, method: Method) {
@@ -663,8 +628,7 @@ fn test_fetch_async_returns_complete_response() {
 
     let _ = server.close();
 
-    assert_eq!(*fetch_response.actual_response().body.borrow_mut(),
-               ResponseBody::Done(MESSAGE.to_vec()));
+    assert_eq!(*fetch_response.actual_response().body.borrow_mut(), MESSAGE);
 }
 
 #[test]
@@ -685,8 +649,7 @@ fn test_opaque_filtered_fetch_async_returns_complete_response() {
     let _ = server.close();
 
     assert_eq!(fetch_response.response_type, ResponseType::Opaque);
-    assert_eq!(*fetch_response.actual_response().body.borrow_mut(),
-               ResponseBody::Done(MESSAGE.to_vec()));
+    assert_eq!(*fetch_response.actual_response().body.borrow_mut(), MESSAGE);
 }
 
 #[test]
@@ -721,8 +684,7 @@ fn test_opaque_redirect_filtered_fetch_async_returns_complete_response() {
     let _ = server.close();
 
     assert_eq!(fetch_response.response_type, ResponseType::OpaqueRedirect);
-    assert_eq!(*fetch_response.actual_response().body.borrow_mut(),
-               ResponseBody::Done(MESSAGE.to_vec()));
+    assert_eq!(*fetch_response.actual_response().body.borrow_mut(), MESSAGE);
 }
 
 #[test]
