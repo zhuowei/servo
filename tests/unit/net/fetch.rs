@@ -647,24 +647,6 @@ fn test_fetch_redirect_updates_method() {
     assert_eq!(rx.try_recv().is_err(), true);
 }
 
-fn response_is_done(response: &Response) -> bool {
-    let response_complete = match response.response_type {
-        ResponseType::Default | ResponseType::Basic | ResponseType::Cors => {
-            (*response.body.borrow_mut()).is_done()
-        }
-        // if the internal response cannot have a body, it shouldn't block the "done" state
-        ResponseType::Opaque | ResponseType::OpaqueRedirect | ResponseType::Error(..) => true
-    };
-
-    let internal_complete = if let Some(ref res) = response.internal_response {
-        res.body.borrow_mut().is_done()
-    } else {
-        true
-    };
-
-    response_complete && internal_complete
-}
-
 #[test]
 fn test_fetch_async_returns_complete_response() {
     static MESSAGE: &'static [u8] = b"this message should be retrieved in full";
@@ -681,12 +663,13 @@ fn test_fetch_async_returns_complete_response() {
 
     let _ = server.close();
 
-    assert_eq!(response_is_done(&fetch_response.to_actual()), true);
+    assert_eq!(*fetch_response.actual_response().body.borrow_mut(),
+               ResponseBody::Done(MESSAGE.to_vec()));
 }
 
 #[test]
 fn test_opaque_filtered_fetch_async_returns_complete_response() {
-    static MESSAGE: &'static [u8] = b"";
+    static MESSAGE: &'static [u8] = b"Yay!";
     let handler = move |_: HyperRequest, response: HyperResponse| {
         response.send(MESSAGE).unwrap();
     };
@@ -702,12 +685,13 @@ fn test_opaque_filtered_fetch_async_returns_complete_response() {
     let _ = server.close();
 
     assert_eq!(fetch_response.response_type, ResponseType::Opaque);
-    assert_eq!(response_is_done(&fetch_response), true);
+    assert_eq!(*fetch_response.actual_response().body.borrow_mut(),
+               ResponseBody::Done(MESSAGE.to_vec()));
 }
 
 #[test]
 fn test_opaque_redirect_filtered_fetch_async_returns_complete_response() {
-    static MESSAGE: &'static [u8] = b"";
+    static MESSAGE: &'static [u8] = b"Yay!";
     let handler = move |request: HyperRequest, mut response: HyperResponse| {
         let redirects = match request.uri {
             RequestUri::AbsolutePath(url) =>
@@ -717,13 +701,12 @@ fn test_opaque_redirect_filtered_fetch_async_returns_complete_response() {
             _ => panic!()
         };
 
-        if redirects == 1 {
-            response.send(MESSAGE).unwrap();
-        } else {
+        if redirects != 1 {
             *response.status_mut() = StatusCode::Found;
             let url = format!("{}", 1);
             response.headers_mut().set(Location(url.to_owned()));
         }
+        response.send(MESSAGE).unwrap();
     };
 
     let (mut server, url) = make_server(handler);
@@ -738,7 +721,8 @@ fn test_opaque_redirect_filtered_fetch_async_returns_complete_response() {
     let _ = server.close();
 
     assert_eq!(fetch_response.response_type, ResponseType::OpaqueRedirect);
-    assert_eq!(response_is_done(&fetch_response), true);
+    assert_eq!(*fetch_response.actual_response().body.borrow_mut(),
+               ResponseBody::Done(MESSAGE.to_vec()));
 }
 
 #[test]
