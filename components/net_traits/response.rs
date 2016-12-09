@@ -192,6 +192,7 @@ impl Response {
         match response.response_type {
             ResponseType::Default | ResponseType::Error(..) => unreachable!(),
 
+            // https://fetch.spec.whatwg.org/#concept-filtered-response-basic
             ResponseType::Basic => {
                 let headers = old_headers.iter().filter(|header| {
                     match &*header.name().to_ascii_lowercase() {
@@ -202,7 +203,9 @@ impl Response {
                 response.headers = headers;
             },
 
+            // https://fetch.spec.whatwg.org/#concept-filtered-response-cors
             ResponseType::Cors => {
+                // https://fetch.spec.whatwg.org/#main-fetch step 13.1.
                 let access = old_headers.get::<AccessControlExposeHeaders>();
                 let allowed_headers = access.as_ref().map(|v| &v[..]).unwrap_or(&[]);
 
@@ -221,6 +224,7 @@ impl Response {
                 response.headers = headers;
             },
 
+            // https://fetch.spec.whatwg.org/#concept-filtered-response-opaque
             ResponseType::Opaque => {
                 response.url_list = RefCell::new(vec![]);
                 response.url = None;
@@ -230,6 +234,7 @@ impl Response {
                 response.cache_state = CacheState::None;
             },
 
+            // https://fetch.spec.whatwg.org/#concept-filtered-response-opaque-redirect
             ResponseType::OpaqueRedirect => {
                 response.headers = Headers::new();
                 response.status = None;

@@ -123,8 +123,6 @@ pub fn main_fetch(request: Rc<Request>,
                   done_chan: &mut DoneChannel,
                   context: &FetchContext)
                   -> Response {
-    // TODO: Implement main fetch spec
-
     // Step 1
     let mut response = None;
 
@@ -136,18 +134,13 @@ pub fn main_fetch(request: Rc<Request>,
         }
     }
 
-    // Step 3
-    // TODO be able to execute report CSP
+    // FIXME(#4577): Step 3 (CSP)
+    // FIXME(#4577): Step 4 (CSP; upgrade-insecure-requests)
+    // FIXME(#14514): Step 5a (port blocking)
+    // FIXME(#14513): Step 5b (mixed content blocking)
+    // FIXME(#4577): Step 5c (CSP)
 
-    // Step 4
-    // TODO this step, based off of http_loader.rs (upgrade)
-
-    // Step 5
-    // TODO this step (CSP port/content blocking)
-
-    // Step 6
-    // TODO this step (referrer policy)
-    // currently the clients themselves set referrer policy in RequestInit
+    // Step 6: handled by callers.
 
     // Step 7
     let referrer_policy = request.referrer_policy.get().unwrap_or(ReferrerPolicy::NoReferrerWhenDowngrade);
@@ -165,8 +158,7 @@ pub fn main_fetch(request: Rc<Request>,
         *request.referrer.borrow_mut() = Referrer::from_url(referrer_url);
     }
 
-    // Step 9
-    // TODO this step (HSTS)
+    // FIXME(#14363): Step 9 (HSTS)
 
     // Step 10
     // this step is obsoleted by fetch_async
@@ -202,13 +194,12 @@ pub fn main_fetch(request: Rc<Request>,
                  (!is_simple_method(&request.method.borrow()) ||
                   request.headers.borrow().iter().any(|h| !is_simple_header(&h)))) {
                 request.response_tainting.set(ResponseTainting::CorsTainting);
+                // FIXME(#14519): Allow redirects.
                 request.redirect_mode.set(RedirectMode::Error);
-                let response = http_fetch(request.clone(), cache, true, true, false,
-                                          target, done_chan, context);
-                if response.is_network_error() {
-                    // TODO clear cache entries using request
-                }
-                response
+
+                // FIXME(#12972): clear cache entries using request if this
+                //                returns a network error.
+                http_fetch(request.clone(), cache, true, true, false, target, done_chan, context)
 
             } else {
                 request.response_tainting.set(ResponseTainting::CorsTainting);
@@ -239,6 +230,7 @@ pub fn main_fetch(request: Rc<Request>,
         // Step 14
         let network_error_res;
         let internal_response = if let Some(error) = response.get_network_error() {
+            // FIXME(#14522): should we be creating a new `Response` here?
             network_error_res = Response::network_error(error.clone());
             &network_error_res
         } else {
@@ -250,35 +242,23 @@ pub fn main_fetch(request: Rc<Request>,
             *internal_response.url_list.borrow_mut() = request.url_list.borrow().clone();
         }
 
-        // Step 16
-        // TODO this step (CSP/blocking)
+        // FIXME(#14513): Step 16a (mixed content blocking)
+        // FIXME(#4577): Step 16b (CSP)
+        // FIXME(#14520): Step 16c (script mime types)
+        // FIXME(#14521): Step 16d (XCTO: nosniff)
 
         // Step 17
-        if !response.is_network_error() && (is_null_body_status(&internal_response.status) ||
-            match *request.method.borrow() {
-                Method::Head | Method::Connect => true,
-                _ => false })
-            {
+        if !response.is_network_error() &&
+           (is_null_body_status(&internal_response.status) ||
+            matches!(current_url.scheme(), Method::Head | Method::Connect)) {
             // when Fetch is used only asynchronously, we will need to make sure
             // that nothing tries to write to the body at this point
             let mut body = internal_response.body.lock().unwrap();
             *body = ResponseBody::Empty;
         }
-
-        // Step 18
-        // TODO be able to compare response integrity against request integrity metadata
-        // if !response.is_network_error() {
-
-        //     // Substep 1
-        //     response.wait_until_done();
-
-        //     // Substep 2
-        //     if response.termination_reason.is_none() {
-        //         response = Response::network_error();
-        //         internal_response = Response::network_error();
-        //     }
-        // }
     }
+
+    // FIXME(#14523): Step 18 (SRI)
 
     // Step 19
     if request.synchronous {
@@ -363,10 +343,12 @@ pub fn main_fetch(request: Rc<Request>,
         }
     }
 
-    // Step 23
+    // FIXME(#14524): Step 23-24 (trailer headers)
+
+    // Step 25
     request.done.set(true);
 
-    // Step 24
+    // Step 26
     if let Some(ref mut target) = *target {
         target.process_response_eof(&response);
     }
@@ -482,6 +464,7 @@ pub fn is_simple_header(h: &HeaderView) -> bool {
     }
 }
 
+/// https://fetch.spec.whatwg.org/#cors-safelisted-method
 pub fn is_simple_method(m: &Method) -> bool {
     match *m {
         Method::Get | Method::Head | Method::Post => true,
