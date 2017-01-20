@@ -14,6 +14,7 @@ use dom::bindings::codegen::Bindings::EventHandlerBinding::OnErrorEventHandlerNo
 use dom::bindings::codegen::Bindings::EventListenerBinding::EventListener;
 use dom::bindings::codegen::Bindings::EventTargetBinding::EventTargetMethods;
 use dom::bindings::codegen::Bindings::WindowBinding::WindowMethods;
+use dom::bindings::codegen::UnionTypes::EventListenerOptionsOrBoolean;
 use dom::bindings::codegen::UnionTypes::EventOrString;
 use dom::bindings::error::{Error, Fallible, report_pending_exception};
 use dom::bindings::inheritance::Castable;
@@ -547,10 +548,14 @@ impl EventTargetMethods for EventTarget {
     fn AddEventListener(&self,
                         ty: DOMString,
                         listener: Option<Rc<EventListener>>,
-                        capture: bool) {
+                        capture: EventListenerOptionsOrBoolean) {
         let listener = match listener {
             Some(l) => l,
             None => return,
+        };
+        let capture = match capture {
+            EventListenerOptionsOrBoolean::EventListenerOptions(o) => o.capture,
+            EventListenerOptionsOrBoolean::Boolean(b) => b,
         };
         let mut handlers = self.handlers.borrow_mut();
         let entry = match handlers.entry(Atom::from(ty)) {

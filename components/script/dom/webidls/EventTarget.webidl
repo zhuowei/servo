@@ -5,11 +5,16 @@
  * https://dom.spec.whatwg.org/#interface-eventtarget
  */
 
+dictionary EventListenerOptions {
+  boolean capture = false;
+};
+
+
 [Abstract, Exposed=(Window,Worker)]
 interface EventTarget {
   void addEventListener(DOMString type,
                         EventListener? listener,
-                        optional boolean capture = false);
+                        optional (EventListenerOptions or boolean) capture);
   void removeEventListener(DOMString type,
                            EventListener? listener,
                            optional boolean capture = false);

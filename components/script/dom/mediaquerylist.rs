@@ -7,6 +7,7 @@ use dom::bindings::codegen::Bindings::EventHandlerBinding::EventHandlerNonNull;
 use dom::bindings::codegen::Bindings::EventListenerBinding::EventListener;
 use dom::bindings::codegen::Bindings::EventTargetBinding::EventTargetMethods;
 use dom::bindings::codegen::Bindings::MediaQueryListBinding::{self, MediaQueryListMethods};
+use dom::bindings::codegen::UnionTypes::EventListenerOptionsOrBoolean;
 use dom::bindings::inheritance::Castable;
 use dom::bindings::js::{JS, Root};
 use dom::bindings::reflector::DomObject;
@@ -107,7 +108,8 @@ impl MediaQueryListMethods for MediaQueryList {
     // https://drafts.csswg.org/cssom-view/#dom-mediaquerylist-addlistener
     fn AddListener(&self, listener: Option<Rc<EventListener>>) {
         self.upcast::<EventTarget>().AddEventListener(DOMString::from_string("change".to_owned()),
-                                                      listener, false);
+                                                      listener,
+                                                      EventListenerOptionsOrBoolean::Boolean(false));
     }
 
     // https://drafts.csswg.org/cssom-view/#dom-mediaquerylist-removelistener
