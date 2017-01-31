@@ -77,6 +77,7 @@ pub enum FileReaderReadyState {
 }
 
 #[derive(HeapSizeOf, JSTraceable)]
+#[must_root]
 pub enum FileReaderResult {
     ArrayBuffer(Heap<JSVal>),
     String(DOMString),

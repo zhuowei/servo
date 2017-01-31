@@ -13,6 +13,7 @@ use dom::globalscope::GlobalScope;
 use dom::promise::Promise;
 use encoding::all::UTF_8;
 use encoding::types::{DecoderTrap, Encoding};
+use js::jsapi::Heap;
 use js::jsapi::JSContext;
 use js::jsapi::JS_ClearPendingException;
 use js::jsapi::JS_ParseJSON;
@@ -32,9 +33,11 @@ pub enum BodyType {
     Text
 }
 
+#[must_root]
+#[derive(JSTraceable)]
 pub enum FetchedData {
     Text(String),
-    Json(JSValue),
+    Json(Heap<JSValue>),
     BlobData(Root<Blob>),
     FormData(Root<FormData>),
 }
@@ -82,7 +85,7 @@ pub fn consume_body_with_promise<T: BodyOperations + DomObject>(object: &T,
         Ok(results) => {
             match results {
                 FetchedData::Text(s) => promise.resolve_native(cx, &USVString(s)),
-                FetchedData::Json(j) => promise.resolve_native(cx, &j),
+                FetchedData::Json(j) => promise.resolve_native(cx, &j.handle()),
                 FetchedData::BlobData(b) => promise.resolve_native(cx, &b),
                 FetchedData::FormData(f) => promise.resolve_native(cx, &f),
             };
@@ -129,7 +132,7 @@ fn run_json_data_algorithm(cx: *mut JSContext,
             // TODO: See issue #13464. Exception should be thrown instead of cleared.
             return Err(Error::Type("Failed to parse JSON".to_string()));
         }
-        Ok(FetchedData::Json(rval.get()))
+        Ok(FetchedData::Json(Heap::new(rval.get())))
     }
 }
 

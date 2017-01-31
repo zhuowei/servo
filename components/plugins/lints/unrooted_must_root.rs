@@ -44,16 +44,22 @@ fn is_unrooted_ty(cx: &LateContext, ty: &ty::TyS, in_new_function: bool) -> bool
     ty.maybe_walk(|t| {
         match t.sty {
             ty::TyAdt(did, _) => {
-                if cx.tcx.has_attr(did.did, "must_root") {
+                if cx.tcx.has_attr(did.did, "must_root") ||
+                    match_def_path(cx, did.did, &["js", "jsapi", "Value"]) ||
+                    match_def_path(cx, did.did, &["js", "jsapi", "Heap"]) {
                     ret = true;
                     false
-                } else if cx.tcx.has_attr(did.did, "allow_unrooted_interior") {
+                } else if cx.tcx.has_attr(did.did, "allow_unrooted_interior") ||
+                    match_def_path(cx, did.did, &["js", "jsapi", "Rooted"]) ||
+                    match_def_path(cx, did.did, &["js", "rust", "RootedGuard"]) {
                     false
                 } else if match_def_path(cx, did.did, &["core", "cell", "Ref"])
                         || match_def_path(cx, did.did, &["core", "cell", "RefMut"])
                         || match_def_path(cx, did.did, &["core", "slice", "Iter"])
                         || match_def_path(cx, did.did, &["std", "collections", "hash", "map", "OccupiedEntry"])
-                        || match_def_path(cx, did.did, &["std", "collections", "hash", "map", "VacantEntry"]) {
+                        || match_def_path(cx, did.did, &["std", "collections", "hash", "map", "VacantEntry"])
+                        || match_def_path(cx, did.did, &["js", "jsapi", "Handle"])
+                        || match_def_path(cx, did.did, &["js", "jsapi", "MutableHandle"]) {
                     // Structures which are semantically similar to an &ptr.
                     false
                 } else {

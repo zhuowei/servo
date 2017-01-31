@@ -347,6 +347,7 @@ pub enum TimerCallback {
 }
 
 #[derive(JSTraceable, Clone)]
+#[must_root]
 enum InternalTimerCallback {
     StringTimerCallback(DOMString),
     FunctionTimerCallback(Rc<Function>, Rc<Vec<Heap<JSVal>>>),
