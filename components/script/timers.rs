@@ -304,6 +304,7 @@ pub struct JsTimerHandle(i32);
 
 #[derive(JSTraceable, HeapSizeOf)]
 #[privatize]
+#[must_root]
 pub struct JsTimers {
     next_timer_handle: Cell<JsTimerHandle>,
     active_timers: DOMRefCell<HashMap<JsTimerHandle, JsTimerEntry>>,
@@ -323,6 +324,7 @@ struct JsTimerEntry {
 //      to the function when calling it)
 // TODO: Handle rooting during invocation when movable GC is turned on
 #[derive(JSTraceable, HeapSizeOf)]
+#[must_root]
 pub struct JsTimerTask {
     #[ignore_heap_size_of = "Because it is non-owning"]
     handle: JsTimerHandle,
