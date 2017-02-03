@@ -40,6 +40,7 @@ use dom::bindings::js::{JS, Root};
 use dom::bindings::refcounted::{Trusted, TrustedPromise};
 use dom::bindings::reflector::{DomObject, Reflector};
 use dom::bindings::str::{DOMString, USVString};
+use dom::bindings::structuredclone::StructuredCloneData;
 use dom::bindings::utils::WindowProxyHandler;
 use dom::document::PendingRestyle;
 use encoding::types::EncodingRef;
@@ -58,7 +59,7 @@ use js::glue::{CallObjectTracer, CallValueTracer};
 use js::jsapi::{GCTraceKindToAscii, Heap, JSObject, JSTracer, TraceKind};
 use js::jsval::JSVal;
 use js::rust::Runtime;
-use msg::constellation_msg::{FrameId, FrameType, PipelineId};
+use msg::constellation_msg::{FrameId, FrameType, PipelineId, StateId};
 use net_traits::{Metadata, NetworkError, ReferrerPolicy, ResourceThreads};
 use net_traits::filemanager_thread::RelativePos;
 use net_traits::image::base::{Image, ImageMetadata};
@@ -328,6 +329,7 @@ unsafe_no_jsmanaged_fields!(PropertyDeclarationBlock);
 // These three are interdependent, if you plan to put jsmanaged data
 // in one of these make sure it is propagated properly to containing structs
 unsafe_no_jsmanaged_fields!(DocumentActivity, FrameId, FrameType, WindowSizeData, WindowSizeType, PipelineId);
+unsafe_no_jsmanaged_fields!(StateId);
 unsafe_no_jsmanaged_fields!(TimerEventId, TimerSource);
 unsafe_no_jsmanaged_fields!(TimelineMarkerType);
 unsafe_no_jsmanaged_fields!(WorkerId);
@@ -378,6 +380,7 @@ unsafe_no_jsmanaged_fields!(WebGLRenderbufferId);
 unsafe_no_jsmanaged_fields!(WebGLShaderId);
 unsafe_no_jsmanaged_fields!(WebGLTextureId);
 unsafe_no_jsmanaged_fields!(MediaList);
+unsafe_no_jsmanaged_fields!(StructuredCloneData);
 
 unsafe impl<'a> JSTraceable for &'a str {
     #[inline]
