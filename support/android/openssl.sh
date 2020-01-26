@@ -123,7 +123,8 @@ for host in "linux-x86_64" "linux-x86" "darwin-x86_64" "darwin-x86"
 do
   if [ -d "$ANDROID_NDK_ROOT/toolchains/$_ANDROID_EABI/prebuilt/$host/bin" ]; then
     ANDROID_TOOLCHAIN="$ANDROID_NDK_ROOT/toolchains/$_ANDROID_EABI/prebuilt/$host/bin"
-    ANDROID_GCC_TOOLCHAIN="$ANDROID_NDK_ROOT/toolchains/$_ANDROID_GCC-4.9/prebuilt/$host/$_ANDROID_TARGET/bin"
+    ANDROID_GCC_TOOLCHAIN_NO_TARGET="$ANDROID_NDK_ROOT/toolchains/$_ANDROID_GCC-4.9/prebuilt/$host"
+    ANDROID_GCC_TOOLCHAIN="$ANDROID_GCC_TOOLCHAIN_NO_TARGET/$_ANDROID_TARGET/bin"
     break
   fi
 done
@@ -219,7 +220,7 @@ xCFLAGS="-DSHARED_EXTENSION=.so -DOPENSSL_PIC -DDSO_DLFCN -DHAVE_DLFCN_H \
   -I$ANDROID_DEV/include \
   -B$ANDROID_DEV/lib -B$ANDROID_NDK_ROOT/platforms/$_ANDROID_API/$_ANDROID_ARCH/usr/lib \
   -L$ANDROID_NDK_ROOT/platforms/$_ANDROID_API/$_ANDROID_ARCH/usr/lib -L$ANDROID_NDK_ROOT/toolchains/$_ANDROID_GCC-4.9/prebuilt/$host/lib/gcc/$_ANDROID_TARGET/4.9.x/ \
-  --gcc-toolchain=$ANDROID_GCC_TOOLCHAIN \
+  --gcc-toolchain=$ANDROID_GCC_TOOLCHAIN_NO_TARGET \
   --sysroot=$ANDROID_SYSROOT \
   --target=$RUST_TARGET"
 
